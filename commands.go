@@ -2,9 +2,9 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/url"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
@@ -63,11 +63,6 @@ func (b *bot) handlePlay(video, vp9 bool) telegram.MessageHandler {
 	}
 }
 
-type ytMetadata struct {
-	ID string `json:"id"`
-	Title string `json:"title"`
-}
-
 func downloadExternal(ctx context.Context, dir, query string, video bool) (string, string, error) {
 	target := query
 	if parsed, err := url.ParseRequestURI(query); err == nil && parsed.Scheme != "" {
@@ -77,14 +72,27 @@ func downloadExternal(ctx context.Context, dir, query string, video bool) (strin
 	} else {
 		target = "ytsearch1:" + query
 	}
-	metaBytes, err := exec.CommandContext(ctx, "yt-dlp", "--no-warnings", "--no-playlist", "--dump-single-json", target).Output()
-	if err != nil { return "", "", fmt.Errorf("yt-dlp metadata lookup: %w", err) }
-	var meta ytMetadata
-	if err := json.Unmarshal(metaBytes, &meta); err != nil { return "", "", fmt.Errorf("parse yt-dlp metadata: %w", err) }
-	if meta.ID == "" { return "", "", fmt.Errorf("source returned no media ID") }
-	if meta.Title == "" { meta.Title = meta.ID }
-	base := filepath.Join(dir, sanitize(meta.ID))
-	args := []string{"--no-warnings", "--no-playlist", "--force-overwrites"}
+
+	// Search extractors can return playlist-shaped JSON. Asking yt-dlp to print
+	// the first result's ID and title works for both search queries and URLs.
+	metaCmd := exec.CommandContext(ctx, "yt-dlp",
+		"--no-warnings", "--playlist-items", "1",
+		"--print", "%(id)s", "--print", "%(title)s", target)
+	metaBytes, err := metaCmd.Output()
+	if err != nil {
+		return "", "", fmt.Errorf("yt-dlp metadata lookup: %w", err)
+	}
+	lines := strings.SplitN(strings.TrimSpace(string(metaBytes)), "\n", 2)
+	if len(lines) == 0 || strings.TrimSpace(lines[0]) == "" {
+		return "", "", fmt.Errorf("source returned no media ID")
+	}
+	id := strings.TrimSpace(lines[0])
+	title := id
+	if len(lines) > 1 && strings.TrimSpace(lines[1]) != "" {
+		title = strings.TrimSpace(lines[1])
+	}
+	base := filepath.Join(dir, sanitize(id))
+	args := []string{"--no-warnings", "--playlist-items", "1", "--force-overwrites"}
 	if video {
 		args = append(args, "-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best", "--merge-output-format", "mp4")
 	} else {
@@ -96,9 +104,14 @@ func downloadExternal(ctx context.Context, dir, query string, video bool) (strin
 		return "", "", fmt.Errorf("yt-dlp download: %w (%s)", err, strings.TrimSpace(string(output)))
 	}
 	ext := ".mp3"
-	if video { ext = ".mp4" }
+	if video {
+		ext = ".mp4"
+	}
 	path := base + ext
-	return meta.Title, path, nil
+	if _, err := os.Stat(path); err != nil {
+		return "", "", fmt.Errorf("download completed but expected output %s was not found: %w", filepath.Base(path), err)
+	}
+	return title, path, nil
 }
 
 func (b *bot) register() {
