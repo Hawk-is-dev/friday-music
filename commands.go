@@ -148,7 +148,7 @@ func (b *bot) handleResume(m *telegram.NewMessage) error {
 func (b *bot) handleStop(m *telegram.NewMessage) error {
 	s := b.mgr.get(m.ChatID()); s.stop()
 	if err := s.leave(); err != nil { return reply2(m, "Stopped; voice-chat leave warning: "+err.Error()) }
-	b.mgr.drop(m.ChatID())
+	b.mgr.dropIfSame(m.ChatID(), s)
 	return reply2(m, "Stopped and queue cleared.")
 }
 func (b *bot) handleLeave(m *telegram.NewMessage) error {
