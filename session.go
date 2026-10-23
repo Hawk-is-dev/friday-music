@@ -63,33 +63,37 @@ func (m *manager) dropIfSame(chatID int64, expected *session) {
 	m.mu.Unlock()
 }
 
-func (s *session) enqueue(t track) (int, bool) {
+func (s *session) enqueueTrack(factory clientFactory, chatID any, t track) (int, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.queue = append(s.queue, t)
-	if !s.playing { s.playing = true; return 0, true }
-	return len(s.queue), false
-}
-
-func (s *session) ensureCall(factory clientFactory, chatID any) error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.call != nil { return nil }
-	call := factory(s.useVP9)
-	call.OnParticipant(func(ev gortc.ParticipantEvent, p gortc.Participant) {
-		s.mu.Lock()
-		switch ev {
-		case gortc.ParticipantJoined: s.joinedAt[p.PeerID] = true
-		case gortc.ParticipantLeft: delete(s.joinedAt, p.PeerID)
+	if s.call == nil {
+		call := factory(s.useVP9)
+		call.OnParticipant(func(ev gortc.ParticipantEvent, p gortc.Participant) {
+			s.mu.Lock()
+			switch ev {
+			case gortc.ParticipantJoined:
+				s.joinedAt[p.PeerID] = true
+			case gortc.ParticipantLeft:
+				delete(s.joinedAt, p.PeerID)
+			}
+			s.mu.Unlock()
+		})
+		call.OnBandwidthEstimate(func(e gortc.BandwidthEstimate) {
+			s.mu.Lock()
+			s.lastBwe = e
+			s.mu.Unlock()
+		})
+		if err := call.Join(chatID); err != nil {
+			return 0, false, err
 		}
-		s.mu.Unlock()
-	})
-	call.OnBandwidthEstimate(func(e gortc.BandwidthEstimate) {
-		s.mu.Lock(); s.lastBwe = e; s.mu.Unlock()
-	})
-	if err := call.Join(chatID); err != nil { return err }
-	s.call = call
-	return nil
+		s.call = call
+	}
+	s.queue = append(s.queue, t)
+	if !s.playing {
+		s.playing = true
+		return 0, true, nil
+	}
+	return len(s.queue), false, nil
 }
 
 func (s *session) startNext() {
