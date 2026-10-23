@@ -121,3 +121,23 @@ func TestDropIfSamePreservesReplacementSession(t *testing.T) {
 		t.Fatal("dropIfSame removed a replacement session")
 	}
 }
+
+func TestShutdownAllClosesAndDropsSessions(t *testing.T) {
+	m := newManager()
+	s := m.get(123)
+	s.queue = []track{{title: "queued", path: filepath.Join(t.TempDir(), "queued.mp3")}}
+	if err := os.WriteFile(s.queue[0].path, []byte("test"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	m.shutdownAll()
+	if _, ok := m.sessions[123]; ok {
+		t.Fatal("shutdownAll left session in manager")
+	}
+	s.mu.Lock()
+	closed := s.closed
+	queueLen := len(s.queue)
+	s.mu.Unlock()
+	if !closed || queueLen != 0 {
+		t.Fatalf("session after shutdown: closed=%v queueLen=%d", closed, queueLen)
+	}
+}
