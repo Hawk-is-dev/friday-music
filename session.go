@@ -215,6 +215,19 @@ func loadEnv(path string) {
 func mustEnv(key string) string { v := os.Getenv(key); if v == "" { logFatalMissingEnv(key) }; return v }
 func logFatalMissingEnv(key string) { panic("missing required environment variable: " + key) }
 
+func (m *manager) shutdownAll() {
+	m.mu.Lock()
+	sessions := make([]*session, 0, len(m.sessions))
+	for _, s := range m.sessions {
+		sessions = append(sessions, s)
+	}
+	m.mu.Unlock()
+	for _, s := range sessions {
+		_ = s.leave()
+		m.dropIfSame(s.chatID, s)
+	}
+}
+
 func (s *session) shuffle() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
