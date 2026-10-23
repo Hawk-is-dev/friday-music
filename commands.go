@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
-	"math/rand"
 	"os/exec"
 	"path/filepath"
 	"strconv"
