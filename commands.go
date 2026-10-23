@@ -52,6 +52,11 @@ func (b *bot) handlePlay(video, vp9 bool) telegram.MessageHandler {
 		}
 		if err != nil { return edit(status, "Media download failed: "+err.Error()+"\nFor URL/search playback, install yt-dlp and ffmpeg.") }
 
+		// If the assistant user is not in the group yet, try to invite it using
+		// a short-lived, single-use link created by the bot. This requires the
+		// bot to be an administrator with invite-user permission.
+		inviteErr := b.tryAutoJoinAssistant(m.ChatID())
+
 		s := b.mgr.get(m.ChatID())
 		s.mu.Lock()
 		s.useVP9 = vp9
@@ -59,7 +64,11 @@ func (b *bot) handlePlay(video, vp9 bool) telegram.MessageHandler {
 		pos, startNow, enqueueErr := s.enqueueTrack(b.callFactory, m.ChatID(), track{title: title, path: path, video: video, vp9: vp9})
 		if enqueueErr != nil {
 			removeFile(path)
-			return edit(status, "Could not join voice chat: "+enqueueErr.Error()+"\nStart a voice chat first and ensure the assistant account is in the group.")
+			message := "Could not join voice chat: " + enqueueErr.Error() + "\nMake sure the group has an active voice chat and the bot is an admin allowed to invite users."
+			if inviteErr != nil {
+				message += "\nAssistant auto-join note: " + inviteErr.Error()
+			}
+			return edit(status, message)
 		}
 		if startNow { s.startNext(); return edit(status, "Now playing: "+title) }
 		return edit(status, fmt.Sprintf("Added to queue #%d: %s", pos, title))
