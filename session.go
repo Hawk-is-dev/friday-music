@@ -92,6 +92,7 @@ func (s *session) ensureCall(factory clientFactory, chatID any) error {
 func (s *session) startNext() {
 	s.mu.Lock()
 	if p := s.player; p != nil {
+		s.gen++ // invalidate the old player's completion callback before stopping it
 		s.player = nil
 		s.mu.Unlock()
 		p.Stop()
