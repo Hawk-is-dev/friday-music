@@ -55,9 +55,11 @@ func (m *manager) get(chatID int64) *session {
 	return s
 }
 
-func (m *manager) drop(chatID int64) {
+func (m *manager) dropIfSame(chatID int64, expected *session) {
 	m.mu.Lock()
-	delete(m.sessions, chatID)
+	if m.sessions[chatID] == expected {
+		delete(m.sessions, chatID)
+	}
 	m.mu.Unlock()
 }
 
@@ -65,7 +67,7 @@ func (s *session) enqueue(t track) (int, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.queue = append(s.queue, t)
-	if !s.playing { return 0, true }
+	if !s.playing { s.playing = true; return 0, true }
 	return len(s.queue), false
 }
 
@@ -107,7 +109,7 @@ func (s *session) startNext() {
 		s.call = nil
 		s.mu.Unlock()
 		if call != nil { _ = call.Leave() }
-		s.mgr.drop(s.chatID)
+		s.mgr.dropIfSame(s.chatID, s)
 		return
 	}
 	next := s.queue[0]
