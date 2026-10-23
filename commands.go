@@ -53,12 +53,14 @@ func (b *bot) handlePlay(video, vp9 bool) telegram.MessageHandler {
 		if err != nil { return edit(status, "Media download failed: "+err.Error()+"\nFor URL/search playback, install yt-dlp and ffmpeg.") }
 
 		s := b.mgr.get(m.ChatID())
-		s.mu.Lock(); s.useVP9 = vp9; s.mu.Unlock()
-		if err := s.ensureCall(b.callFactory, m.ChatID()); err != nil {
+		s.mu.Lock()
+		s.useVP9 = vp9
+		s.mu.Unlock()
+		pos, startNow, enqueueErr := s.enqueueTrack(b.callFactory, m.ChatID(), track{title: title, path: path, video: video, vp9: vp9})
+		if enqueueErr != nil {
 			removeFile(path)
-			return edit(status, "Could not join voice chat: "+err.Error()+"\nStart a voice chat first and ensure the assistant account is in the group.")
+			return edit(status, "Could not join voice chat: "+enqueueErr.Error()+"\\nStart a voice chat first and ensure the assistant account is in the group.")
 		}
-		pos, startNow := s.enqueue(track{title:title, path:path, video:video, vp9:vp9})
 		if startNow { s.startNext(); return edit(status, "Now playing: "+title) }
 		return edit(status, fmt.Sprintf("Added to queue #%d: %s", pos, title))
 	}
