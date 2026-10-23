@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/url"
+	"math/rand"
 	"os/exec"
 	"path/filepath"
 	"strconv"
@@ -103,7 +104,7 @@ func downloadExternal(ctx context.Context, dir, query string, video bool) (strin
 
 func (b *bot) register() {
 	b.client.OnCommand("start", func(m *telegram.NewMessage) error { return reply2(m, "FRIDAY Music is online. Use /help to see commands.") })
-	b.client.OnCommand("help", func(m *telegram.NewMessage) error { return reply2(m, "FRIDAY MUSIC\n/play <query/URL> or reply to Telegram audio\n/vplay — reply to video media\n/pause — pause\n/resume — resume\n/skip — skip track\n/stop — clear queue and stop\n/leave — leave voice chat\n/queue — show queue\n/playing — current track\n/volume 0-200 — set volume\n/stats — stream stats\n/participants — voice chat participants") })
+	b.client.OnCommand("help", func(m *telegram.NewMessage) error { return reply2(m, "FRIDAY MUSIC\n/play <query/URL> or reply to Telegram audio\n/vplay — reply to video media\n/pause — pause\n/resume — resume\n/skip — skip track\n/stop — clear queue and stop\n/leave — leave voice chat\n/queue — show queue\n/shuffle — shuffle upcoming tracks\n/playing — current track\n/volume 0-200 — set volume\n/stats — stream stats\n/participants — voice chat participants") })
 	b.client.OnCommand("play", b.handlePlay(false, false))
 	b.client.OnCommand("vplay", b.handlePlay(true, false))
 	b.client.OnCommand("vp9play", b.handlePlay(true, true))
@@ -115,6 +116,7 @@ func (b *bot) register() {
 	b.client.OnCommand("leave", b.handleLeave)
 	b.client.OnCommand("volume", b.handleVolume)
 	b.client.OnCommand("queue", b.handleQueue)
+	b.client.OnCommand("shuffle", b.handleShuffle)
 	b.client.OnCommand("playing", b.handlePlaying)
 	b.client.OnCommand("stats", b.handleStats)
 	b.client.OnCommand("participants", b.handleParticipants)
@@ -192,4 +194,10 @@ func mediaTitle(m *telegram.NewMessage) string {
 }
 func sanitize(name string) string {
 	return strings.NewReplacer("/", "_", "\\", "_", ":", "_", "*", "_", "?", "_", "\"", "_", "<", "_", ">", "_", "|", "_", " ", "_").Replace(name)
+}
+
+func (b *bot) handleShuffle(m *telegram.NewMessage) error {
+	count := b.mgr.get(m.ChatID()).shuffle()
+	if count < 2 { return reply2(m, "Add at least two upcoming tracks to shuffle.") }
+	return reply2(m, fmt.Sprintf("Shuffled %d upcoming tracks.", count))
 }
