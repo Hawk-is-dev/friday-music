@@ -5,7 +5,7 @@ A Go-based Telegram group voice-chat music bot focused on per-chat playback sess
 ## Commands currently implemented
 
 - `/start`, `/help`
-- `/play` — reply to a Telegram audio/media message
+- `/play <YouTube URL or search query>` — search/download audio via yt-dlp; can also reply to Telegram media
 - `/vplay`, `/vp9play` — reply to a Telegram video
 - `/pause`, `/resume`, `/skip`
 - `/stop`, `/end`, `/leave`
@@ -16,7 +16,7 @@ Each group has its own queue/session, so different groups can run separate playb
 
 ## Requirements
 
-- Go 1.25.3+
+- Go 1.25.3+ and `yt-dlp`/`ffmpeg` (included in the Docker image)
 - Bot token from @BotFather
 - Telegram API ID and API hash from https://my.telegram.org
 - A Telegram user/assistant session to join voice chats
@@ -36,7 +36,7 @@ go mod tidy
 go run .
 ```
 
-Add both the bot account and assistant user account to the group. Start a group voice chat before using playback commands. The `/play` command currently expects a reply to a Telegram media message; YouTube search/URL extraction is not yet implemented.
+Add both the bot account and assistant user account to the group. Start a group voice chat before using playback commands. The `/play` command supports YouTube search queries and HTTP(S) URLs through `yt-dlp`, as well as replies to Telegram media. `/vplay` currently plays replied video media; video URL support is basic and depends on the source format.
 
 ## Deployment
 
