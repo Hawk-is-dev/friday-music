@@ -59,7 +59,7 @@ func (b *bot) handlePlay(video, vp9 bool) telegram.MessageHandler {
 		pos, startNow, enqueueErr := s.enqueueTrack(b.callFactory, m.ChatID(), track{title: title, path: path, video: video, vp9: vp9})
 		if enqueueErr != nil {
 			removeFile(path)
-			return edit(status, "Could not join voice chat: "+enqueueErr.Error()+"\\nStart a voice chat first and ensure the assistant account is in the group.")
+			return edit(status, "Could not join voice chat: "+enqueueErr.Error()+"\nStart a voice chat first and ensure the assistant account is in the group.")
 		}
 		if startNow { s.startNext(); return edit(status, "Now playing: "+title) }
 		return edit(status, fmt.Sprintf("Added to queue #%d: %s", pos, title))
