@@ -169,7 +169,10 @@ func (s *session) stop() {
 	s.queue = nil
 	p := s.player; s.player = nil; s.current = nil; s.playing = false; s.gen++
 	s.mu.Unlock()
-	if p != nil { p.Stop() }
+	if p != nil {
+		p.Stop()
+		<-p.Done()
+	}
 }
 func (s *session) leave() error {
 	s.stop()
