@@ -9,7 +9,7 @@ A Go-based Telegram group voice-chat music bot focused on per-chat playback sess
 - `/vplay`, `/vp9play` — reply to a Telegram video
 - `/pause`, `/resume`, `/skip`
 - `/stop`, `/end`, `/leave`
-- `/queue`, `/playing`, `/volume 0-200`
+- `/queue`, `/shuffle`, `/playing`, `/volume 0-200`
 - `/stats`, `/participants`
 
 Each group has its own queue/session, so different groups can run separate playback sessions.
@@ -44,7 +44,7 @@ A Dockerfile and Railway configuration are included. Set environment variables i
 
 ## Roadmap / not implemented yet
 
-YouTube search and URL playback, playlists, loop/shuffle, seeking, lyrics, inline controls, admin checks, automatic reconnect, and production soak testing still need to be added. This repository is an initial working-code foundation, not yet a feature-complete replacement for every existing music bot.
+Playlists, loop/repeat, seeking, lyrics, inline controls, admin checks, automatic reconnect, and production soak testing still need to be added. Queue shuffle is available with `/shuffle`. This repository is an initial working-code foundation, not yet a feature-complete replacement for every existing music bot.
 
 ## Upstream licenses
 
