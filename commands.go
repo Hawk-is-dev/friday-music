@@ -205,15 +205,19 @@ func (b *bot) handleResume(m *telegram.NewMessage) error {
 	return reply2(m, "Resumed.")
 }
 func (b *bot) handleStop(m *telegram.NewMessage) error {
-	s := b.mgr.get(m.ChatID()); s.stop()
-	if err := s.leave(); err != nil { return reply2(m, "Stopped; voice-chat leave warning: "+err.Error()) }
+	s := b.mgr.get(m.ChatID())
+	s.stop()
+	err := s.leave()
 	b.mgr.dropIfSame(m.ChatID(), s)
+	if err != nil { return reply2(m, "Stopped; voice-chat leave warning: "+err.Error()) }
 	return reply2(m, "Stopped and queue cleared.")
 }
 func (b *bot) handleLeave(m *telegram.NewMessage) error {
 	s := b.mgr.get(m.ChatID())
-	if err := s.leave(); err != nil { return reply2(m, "Leave failed: "+err.Error()) }
-	b.mgr.dropIfSame(m.ChatID(), s); return reply2(m, "Left the voice chat.")
+	err := s.leave()
+	b.mgr.dropIfSame(m.ChatID(), s)
+	if err != nil { return reply2(m, "Left with warning: "+err.Error()) }
+	return reply2(m, "Left the voice chat.")
 }
 func (b *bot) handleVolume(m *telegram.NewMessage) error {
 	v, err := strconv.Atoi(strings.TrimSpace(m.Args()))
