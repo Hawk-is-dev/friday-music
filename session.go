@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"math/rand"
 	"os"
 	"strings"
 	"sync"
@@ -198,3 +199,13 @@ func loadEnv(path string) {
 }
 func mustEnv(key string) string { v := os.Getenv(key); if v == "" { logFatalMissingEnv(key) }; return v }
 func logFatalMissingEnv(key string) { panic("missing required environment variable: " + key) }
+
+func (s *session) shuffle() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.queue) < 2 { return len(s.queue) }
+	rand.Shuffle(len(s.queue), func(i, j int) {
+		s.queue[i], s.queue[j] = s.queue[j], s.queue[i]
+	})
+	return len(s.queue)
+}
