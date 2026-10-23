@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"net/url"
 	"os"
@@ -64,6 +65,16 @@ func (b *bot) handlePlay(video, vp9 bool) telegram.MessageHandler {
 }
 
 func downloadExternal(ctx context.Context, dir, query string, video bool) (string, string, error) {
+	cookiePath, cleanupCookies, err := prepareYtDlpCookies(dir)
+	if err != nil {
+		return "", "", fmt.Errorf("prepare yt-dlp cookies: %w", err)
+	}
+	defer cleanupCookies()
+	cookieArgs := []string{}
+	if cookiePath != "" {
+		cookieArgs = append(cookieArgs, "--cookies", cookiePath)
+	}
+
 	target := query
 	if parsed, err := url.ParseRequestURI(query); err == nil && parsed.Scheme != "" {
 		if parsed.Scheme != "https" && parsed.Scheme != "http" {
@@ -75,9 +86,10 @@ func downloadExternal(ctx context.Context, dir, query string, video bool) (strin
 
 	// Search extractors can return playlist-shaped JSON. Asking yt-dlp to print
 	// the first result's ID and title works for both search queries and URLs.
-	metaCmd := exec.CommandContext(ctx, "yt-dlp",
-		"--no-warnings", "--playlist-items", "1",
-		"--print", "%(id)s", "--print", "%(title)s", target)
+	metaArgs := []string{"--no-warnings", "--playlist-items", "1"}
+	metaArgs = append(metaArgs, cookieArgs...)
+	metaArgs = append(metaArgs, "--print", "%(id)s", "--print", "%(title)s", target)
+	metaCmd := exec.CommandContext(ctx, "yt-dlp", metaArgs...)
 	metaBytes, err := metaCmd.Output()
 	if err != nil {
 		return "", "", fmt.Errorf("yt-dlp metadata lookup: %w", err)
@@ -93,6 +105,7 @@ func downloadExternal(ctx context.Context, dir, query string, video bool) (strin
 	}
 	base := filepath.Join(dir, sanitize(id))
 	args := []string{"--no-warnings", "--playlist-items", "1", "--force-overwrites"}
+	args = append(args, cookieArgs...)
 	if video {
 		args = append(args, "-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best", "--merge-output-format", "mp4")
 	} else {
@@ -112,6 +125,42 @@ func downloadExternal(ctx context.Context, dir, query string, video bool) (strin
 		return "", "", fmt.Errorf("download completed but expected output %s was not found: %w", filepath.Base(path), err)
 	}
 	return title, path, nil
+}
+
+func prepareYtDlpCookies(dir string) (string, func(), error) {
+	if path := strings.TrimSpace(os.Getenv("COOKIES_PATH")); path != "" {
+		if _, err := os.Stat(path); err != nil {
+			return "", func() {}, fmt.Errorf("COOKIES_PATH is not readable: %w", err)
+		}
+		return path, func() {}, nil
+	}
+	encoded := strings.TrimSpace(os.Getenv("COOKIES_B64"))
+	if encoded == "" {
+		return "", func() {}, nil
+	}
+	data, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil {
+		data, err = base64.RawStdEncoding.DecodeString(encoded)
+	}
+	if err != nil {
+		return "", func() {}, fmt.Errorf("COOKIES_B64 must be standard base64: %w", err)
+	}
+	file, err := os.CreateTemp(dir, "friday-cookies-*.txt")
+	if err != nil {
+		return "", func() {}, err
+	}
+	path := file.Name()
+	cleanup := func() { _ = os.Remove(path) }
+	if _, err := file.Write(data); err != nil {
+		_ = file.Close()
+		cleanup()
+		return "", func() {}, err
+	}
+	if err := file.Close(); err != nil {
+		cleanup()
+		return "", func() {}, err
+	}
+	return path, cleanup, nil
 }
 
 func (b *bot) register() {
