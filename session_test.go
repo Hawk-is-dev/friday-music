@@ -103,3 +103,21 @@ func TestPrepareYtDlpCookiesRejectsMissingPath(t *testing.T) {
 		t.Fatalf("expected missing COOKIES_PATH error, got %v", err)
 	}
 }
+
+func TestClosedSessionRejectsNewTrack(t *testing.T) {
+	s := &session{closed: true}
+	_, _, err := s.enqueueTrack(nil, int64(123), track{title: "late track"})
+	if err == nil || !strings.Contains(err.Error(), "closed") {
+		t.Fatalf("expected closed-session error, got %v", err)
+	}
+}
+
+func TestDropIfSamePreservesReplacementSession(t *testing.T) {
+	m := newManager()
+	replacement := &session{mgr: m, chatID: 123}
+	m.sessions[123] = replacement
+	m.dropIfSame(123, &session{mgr: m, chatID: 123})
+	if got := m.get(123); got != replacement {
+		t.Fatal("dropIfSame removed a replacement session")
+	}
+}
