@@ -32,14 +32,14 @@ func (b *bot) callFactory(vp9 bool) *gortc.Call {
 
 func (b *bot) handlePlay(video, vp9 bool) telegram.MessageHandler {
 	return func(m *telegram.NewMessage) error {
-		status, _ := m.Reply("FRIDAY: preparing media…")
+		status, _ := m.Reply("✦ FRIDAY MUSIC\n└ Preparing your track…")
 		var title, path string
 		var err error
 
 		if m.IsReply() {
 			reply, replyErr := m.GetReplyMessage()
-			if replyErr != nil { return edit(status, "Could not read the replied message.") }
-			if !reply.IsMedia() { return edit(status, "The replied message has no downloadable media.") }
+			if replyErr != nil { return edit(status, "✦ FRIDAY MUSIC\n└ Couldn’t read the replied message.") }
+			if !reply.IsMedia() { return edit(status, "✦ FRIDAY MUSIC\n└ That message has no downloadable media.") }
 			title = mediaTitle(reply)
 			dst := filepath.Join(b.downDir, fmt.Sprintf("%d_%d_%s", m.ChatID(), reply.ID, sanitize(title)))
 			path, err = reply.Download(&telegram.DownloadOptions{FileName:dst})
@@ -48,9 +48,9 @@ func (b *bot) handlePlay(video, vp9 bool) telegram.MessageHandler {
 			defer cancel()
 			title, path, err = downloadExternal(ctx, b.downDir, strings.TrimSpace(m.Args()), video)
 		} else {
-			return edit(status, "Usage: reply to Telegram media with /play, or use /play <YouTube URL/search query>. /vplay supports replied video media.")
+			return edit(status, "✦ HOW TO PLAY\n├ /play <song name or URL>\n├ Reply to audio with /play\n└ Reply to video with /vplay")
 		}
-		if err != nil { return edit(status, "Media download failed: "+err.Error()+"\nFor URL/search playback, install yt-dlp and ffmpeg.") }
+		if err != nil { return edit(status, "✦ DOWNLOAD FAILED\n├ "+err.Error()+"\n└ Check yt-dlp and ffmpeg setup.") }
 
 		// If the assistant user is not in the group yet, try to invite it using
 		// a short-lived, single-use link created by the bot. This requires the
@@ -70,8 +70,8 @@ func (b *bot) handlePlay(video, vp9 bool) telegram.MessageHandler {
 			}
 			return edit(status, message)
 		}
-		if startNow { s.startNext(); return edit(status, "Now playing: "+title) }
-		return edit(status, fmt.Sprintf("Added to queue #%d: %s", pos, title))
+		if startNow { s.startNext(); return edit(status, "♫ NOW PLAYING\n╰─ "+title) }
+		return edit(status, fmt.Sprintf("✦ ADDED TO QUEUE  #%d\n╰─ %s", pos, title))
 	}
 }
 
@@ -183,8 +183,8 @@ func prepareYtDlpCookies(dir string) (string, func(), error) {
 }
 
 func (b *bot) register() {
-	b.client.OnCommand("start", func(m *telegram.NewMessage) error { return reply2(m, "FRIDAY Music is online. Use /help to see commands.") })
-	b.client.OnCommand("help", func(m *telegram.NewMessage) error { return reply2(m, "FRIDAY MUSIC\n/play <query/URL> or reply to Telegram audio\n/vplay — reply to video media\n/pause — pause\n/resume — resume\n/skip — skip track\n/stop — clear queue and stop\n/leave — leave voice chat\n/queue — show queue\n/shuffle — shuffle upcoming tracks\n/playing — current track\n/volume 0-200 — set volume\n/stats — stream stats\n/participants — voice chat participants") })
+	b.client.OnCommand("start", func(m *telegram.NewMessage) error { return reply2(m, "✦ FRIDAY MUSIC\nYour voice-chat soundtrack is ready.\n\nType /help to explore commands.") })
+	b.client.OnCommand("help", func(m *telegram.NewMessage) error { return reply2(m, "✦ FRIDAY MUSIC · COMMANDS\n━━━━━━━━━━━━━━\n♫ PLAYBACK\n├ /play <song or URL> — play music\n├ /vplay — play replied video\n├ /vp9play — video with VP9\n├ /playing — current track\n└ /queue — upcoming tracks\n\n◈ CONTROLS\n├ /pause · /resume · /skip\n├ /stop — stop and clear queue\n├ /leave — leave voice chat\n├ /shuffle — mix the queue\n└ /volume <0-200> — volume\n\n⌁ INFO\n├ /stats — stream status\n└ /participants — voice chat members\n━━━━━━━━━━━━━━\nMade for late-night listening.") })
 	b.client.OnCommand("play", b.handlePlay(false, false))
 	b.client.OnCommand("vplay", b.handlePlay(true, false))
 	b.client.OnCommand("vp9play", b.handlePlay(true, true))
@@ -202,65 +202,65 @@ func (b *bot) register() {
 	b.client.OnCommand("participants", b.handleParticipants)
 }
 func (b *bot) handleSkip(m *telegram.NewMessage) error {
-	if !b.mgr.get(m.ChatID()).skip() { return reply2(m, "Nothing is playing.") }
-	return reply2(m, "Skipped.")
+	if !b.mgr.get(m.ChatID()).skip() { return reply2(m, "♫ NOTHING PLAYING\n╰─ Queue a track with /play.") }
+	return reply2(m, "⏭ TRACK SKIPPED")
 }
 func (b *bot) handlePause(m *telegram.NewMessage) error {
-	if !b.mgr.get(m.ChatID()).pause() { return reply2(m, "Nothing to pause.") }
-	return reply2(m, "Paused.")
+	if !b.mgr.get(m.ChatID()).pause() { return reply2(m, "Ⅱ Nothing is playing to pause.") }
+	return reply2(m, "Ⅱ PLAYBACK PAUSED")
 }
 func (b *bot) handleResume(m *telegram.NewMessage) error {
-	if !b.mgr.get(m.ChatID()).resume() { return reply2(m, "Nothing to resume.") }
-	return reply2(m, "Resumed.")
+	if !b.mgr.get(m.ChatID()).resume() { return reply2(m, "▶ Nothing is paused right now.") }
+	return reply2(m, "▶ PLAYBACK RESUMED")
 }
 func (b *bot) handleStop(m *telegram.NewMessage) error {
 	s := b.mgr.get(m.ChatID())
 	s.stop()
 	err := s.leave()
 	b.mgr.dropIfSame(m.ChatID(), s)
-	if err != nil { return reply2(m, "Stopped; voice-chat leave warning: "+err.Error()) }
-	return reply2(m, "Stopped and queue cleared.")
+	if err != nil { return reply2(m, "■ STOPPED\n└ Voice-chat warning: "+err.Error()) }
+	return reply2(m, "■ PLAYBACK STOPPED\n╰─ Queue cleared.")
 }
 func (b *bot) handleLeave(m *telegram.NewMessage) error {
 	s := b.mgr.get(m.ChatID())
 	err := s.leave()
 	b.mgr.dropIfSame(m.ChatID(), s)
-	if err != nil { return reply2(m, "Left with warning: "+err.Error()) }
-	return reply2(m, "Left the voice chat.")
+	if err != nil { return reply2(m, "↗ Left with warning: "+err.Error()) }
+	return reply2(m, "↗ LEFT VOICE CHAT")
 }
 func (b *bot) handleVolume(m *telegram.NewMessage) error {
 	v, err := strconv.Atoi(strings.TrimSpace(m.Args()))
-	if err != nil || v < 0 || v > 200 { return reply2(m, "Usage: /volume <0-200>") }
-	if err := b.mgr.get(m.ChatID()).setVolume(v); err != nil { return reply2(m, "Volume error: "+err.Error()) }
-	return reply2(m, fmt.Sprintf("Volume set to %d%%.", v))
+	if err != nil || v < 0 || v > 200 { return reply2(m, "◈ Usage: /volume <0-200>") }
+	if err := b.mgr.get(m.ChatID()).setVolume(v); err != nil { return reply2(m, "◈ VOLUME ERROR\n└ "+err.Error()) }
+	return reply2(m, fmt.Sprintf("◈ VOLUME SET\n╰─ %d%%", v))
 }
 func (b *bot) handleQueue(m *telegram.NewMessage) error {
 	s := b.mgr.get(m.ChatID()); now, ok := s.nowPlaying(); tracks := s.list()
 	var out strings.Builder
-	if ok { out.WriteString("Now playing: "+now+"\n") } else { out.WriteString("Nothing playing.\n") }
-	if len(tracks) == 0 { out.WriteString("Queue is empty.") } else {
-		out.WriteString("Up next:\n")
-		for i, t := range tracks { fmt.Fprintf(&out, "%d. %s\n", i+1, t.title) }
+	if ok { out.WriteString("♫ NOW PLAYING\n╰─ "+now+"\n\n") } else { out.WriteString("♫ NOTHING PLAYING\n\n") }
+	if len(tracks) == 0 { out.WriteString("╰─ Queue is empty.") } else {
+		out.WriteString("✦ UP NEXT\n")
+		for i, t := range tracks { fmt.Fprintf(&out, "%02d  ·  %s\n", i+1, t.title) }
 	}
 	return reply2(m, out.String())
 }
 func (b *bot) handlePlaying(m *telegram.NewMessage) error {
 	title, ok := b.mgr.get(m.ChatID()).nowPlaying()
-	if !ok { return reply2(m, "Nothing is playing.") }
-	return reply2(m, "Now playing: "+title)
+	if !ok { return reply2(m, "♫ NOTHING PLAYING\n╰─ Queue a track with /play.") }
+	return reply2(m, "♫ NOW PLAYING\n╰─ "+title)
 }
 func (b *bot) handleStats(m *telegram.NewMessage) error {
 	s := b.mgr.get(m.ChatID()); s.mu.Lock(); bwe, call, vp9 := s.lastBwe, s.call, s.useVP9; s.mu.Unlock()
 	state := "not in voice chat"; if call != nil { state = call.State() }
 	codec := "VP8"; if vp9 { codec = "VP9" }
-	return reply2(m, fmt.Sprintf("State: %s\nCodec: %s\nBitrate: %d kbps\nPacket loss: %d/255\nJitter: %d", state, codec, bwe.BitrateBps/1000, bwe.FractionLost, bwe.Jitter))
+	return reply2(m, fmt.Sprintf("⌁ FRIDAY · STREAM STATUS\n━━━━━━━━━━━━━━\n◈ State     %s\n◈ Codec     %s\n◈ Bitrate   %d kbps\n◈ Loss      %d/255\n◈ Jitter    %d\n━━━━━━━━━━━━━━", state, codec, bwe.BitrateBps/1000, bwe.FractionLost, bwe.Jitter))
 }
 func (b *bot) handleParticipants(m *telegram.NewMessage) error {
 	s := b.mgr.get(m.ChatID()); s.mu.Lock(); call := s.call; s.mu.Unlock()
-	if call == nil { return reply2(m, "Not in a voice chat.") }
-	parts := call.Participants(); if len(parts) == 0 { return reply2(m, "No participants reported yet.") }
-	var out strings.Builder; fmt.Fprintf(&out, "%d participant(s):\n", len(parts))
-	for _, p := range parts { fmt.Fprintf(&out, "• peer=%d muted=%v video=%v volume=%d\n", p.PeerID, p.Muted, p.HasVideo, p.Volume) }
+	if call == nil { return reply2(m, "⌁ FRIDAY ISN’T IN A VOICE CHAT") }
+	parts := call.Participants(); if len(parts) == 0 { return reply2(m, "⌁ No participants reported yet.") }
+	var out strings.Builder; fmt.Fprintf(&out, "⌁ VOICE CHAT · %d MEMBERS\n", len(parts))
+	for _, p := range parts { fmt.Fprintf(&out, "├ ID %d · muted %v · video %v · volume %d\n", p.PeerID, p.Muted, p.HasVideo, p.Volume) }
 	return reply2(m, out.String())
 }
 func reply2(m *telegram.NewMessage, text string) error { _, err := m.Reply(text); return err }
@@ -282,6 +282,6 @@ func sanitize(name string) string {
 
 func (b *bot) handleShuffle(m *telegram.NewMessage) error {
 	count := b.mgr.get(m.ChatID()).shuffle()
-	if count < 2 { return reply2(m, "Add at least two upcoming tracks to shuffle.") }
-	return reply2(m, fmt.Sprintf("Shuffled %d upcoming tracks.", count))
+	if count < 2 { return reply2(m, "⤨ Add at least two upcoming tracks to shuffle.") }
+	return reply2(m, fmt.Sprintf("⤨ QUEUE SHUFFLED\n╰─ Mixed %d upcoming tracks.", count))
 }
