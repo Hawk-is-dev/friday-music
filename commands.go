@@ -1,10 +1,15 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
+	"net/url"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/amarnathcjd/gortc"
 	"github.com/amarnathcjd/gogram/telegram"
@@ -26,28 +31,79 @@ func (b *bot) callFactory(vp9 bool) *gortc.Call {
 
 func (b *bot) handlePlay(video, vp9 bool) telegram.MessageHandler {
 	return func(m *telegram.NewMessage) error {
-		if !m.IsReply() { return reply2(m, "Reply to a Telegram audio/video file with /play or /vplay.") }
-		reply, err := m.GetReplyMessage()
-		if err != nil { return reply2(m, "Could not read the replied message.") }
-		if !reply.IsMedia() { return reply2(m, "The replied message has no downloadable media.") }
-		status, _ := m.Reply("FRIDAY: downloading media…")
-		title := mediaTitle(reply)
-		dst := filepath.Join(b.downDir, fmt.Sprintf("%d_%d_%s", m.ChatID(), reply.ID, sanitize(title)))
-		path, err := reply.Download(&telegram.DownloadOptions{FileName:dst})
-		if err != nil { return edit(status, "Download failed: "+err.Error()) }
+		status, _ := m.Reply("FRIDAY: preparing media…")
+		var title, path string
+		var err error
+
+		if m.IsReply() {
+			reply, replyErr := m.GetReplyMessage()
+			if replyErr != nil { return edit(status, "Could not read the replied message.") }
+			if !reply.IsMedia() { return edit(status, "The replied message has no downloadable media.") }
+			title = mediaTitle(reply)
+			dst := filepath.Join(b.downDir, fmt.Sprintf("%d_%d_%s", m.ChatID(), reply.ID, sanitize(title)))
+			path, err = reply.Download(&telegram.DownloadOptions{FileName:dst})
+		} else if strings.TrimSpace(m.Args()) != "" {
+			ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
+			defer cancel()
+			title, path, err = downloadExternal(ctx, b.downDir, strings.TrimSpace(m.Args()), video)
+		} else {
+			return edit(status, "Usage: reply to Telegram media with /play, or use /play <YouTube URL/search query>. /vplay supports replied video media.")
+		}
+		if err != nil { return edit(status, "Media download failed: "+err.Error()+"\nFor URL/search playback, install yt-dlp and ffmpeg.") }
+
 		s := b.mgr.get(m.ChatID())
 		s.mu.Lock(); s.useVP9 = vp9; s.mu.Unlock()
 		if err := s.ensureCall(b.callFactory, m.ChatID()); err != nil {
-			removeFile(path); return edit(status, "Could not join voice chat: "+err.Error()+"\nStart a voice chat first and ensure the assistant account is in the group.")
+			removeFile(path)
+			return edit(status, "Could not join voice chat: "+err.Error()+"\nStart a voice chat first and ensure the assistant account is in the group.")
 		}
 		pos, startNow := s.enqueue(track{title:title, path:path, video:video, vp9:vp9})
 		if startNow { s.startNext(); return edit(status, "Now playing: "+title) }
 		return edit(status, fmt.Sprintf("Added to queue #%d: %s", pos, title))
 	}
 }
+
+type ytMetadata struct {
+	ID string `json:"id"`
+	Title string `json:"title"`
+}
+
+func downloadExternal(ctx context.Context, dir, query string, video bool) (string, string, error) {
+	target := query
+	if parsed, err := url.ParseRequestURI(query); err == nil && parsed.Scheme != "" {
+		if parsed.Scheme != "https" && parsed.Scheme != "http" {
+			return "", "", fmt.Errorf("only http/https URLs are supported")
+		}
+	} else {
+		target = "ytsearch1:" + query
+	}
+	metaBytes, err := exec.CommandContext(ctx, "yt-dlp", "--no-warnings", "--no-playlist", "--dump-single-json", target).Output()
+	if err != nil { return "", "", fmt.Errorf("yt-dlp metadata lookup: %w", err) }
+	var meta ytMetadata
+	if err := json.Unmarshal(metaBytes, &meta); err != nil { return "", "", fmt.Errorf("parse yt-dlp metadata: %w", err) }
+	if meta.ID == "" { return "", "", fmt.Errorf("source returned no media ID") }
+	if meta.Title == "" { meta.Title = meta.ID }
+	base := filepath.Join(dir, sanitize(meta.ID))
+	args := []string{"--no-warnings", "--no-playlist", "--force-overwrites"}
+	if video {
+		args = append(args, "-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best", "--merge-output-format", "mp4")
+	} else {
+		args = append(args, "-x", "--audio-format", "mp3", "--audio-quality", "5")
+	}
+	args = append(args, "-o", base+".%(ext)s", target)
+	cmd := exec.CommandContext(ctx, "yt-dlp", args...)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return "", "", fmt.Errorf("yt-dlp download: %w (%s)", err, strings.TrimSpace(string(output)))
+	}
+	ext := ".mp3"
+	if video { ext = ".mp4" }
+	path := base + ext
+	return meta.Title, path, nil
+}
+
 func (b *bot) register() {
 	b.client.OnCommand("start", func(m *telegram.NewMessage) error { return reply2(m, "FRIDAY Music is online. Use /help to see commands.") })
-	b.client.OnCommand("help", func(m *telegram.NewMessage) error { return reply2(m, "FRIDAY MUSIC\n/play — play replied Telegram audio\n/vplay — play replied video\n/pause — pause\n/resume — resume\n/skip — skip track\n/stop — clear queue and stop\n/leave — leave voice chat\n/queue — show queue\n/playing — current track\n/volume 0-200 — set volume\n/stats — stream stats\n/participants — voice chat participants") })
+	b.client.OnCommand("help", func(m *telegram.NewMessage) error { return reply2(m, "FRIDAY MUSIC\n/play <query/URL> or reply to Telegram audio\n/vplay — reply to video media\n/pause — pause\n/resume — resume\n/skip — skip track\n/stop — clear queue and stop\n/leave — leave voice chat\n/queue — show queue\n/playing — current track\n/volume 0-200 — set volume\n/stats — stream stats\n/participants — voice chat participants") })
 	b.client.OnCommand("play", b.handlePlay(false, false))
 	b.client.OnCommand("vplay", b.handlePlay(true, false))
 	b.client.OnCommand("vp9play", b.handlePlay(true, true))
