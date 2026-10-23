@@ -15,9 +15,14 @@ import (
 
 func main() {
 	loadEnv(".env")
+	for _, key := range []string{"BOT_TOKEN", "API_ID", "API_HASH", "SESSION_STRING"} {
+		if strings.TrimSpace(os.Getenv(key)) == "" {
+			log.Fatalf("missing required environment variable: %s", key)
+		}
+	}
 	apiID, err := strconv.Atoi(mustEnv("API_ID"))
-	if err != nil {
-		log.Fatalf("invalid API_ID: %v", err)
+	if err != nil || apiID <= 0 {
+		log.Fatalf("invalid API_ID: must be a positive integer")
 	}
 	apiHash := mustEnv("API_HASH")
 
