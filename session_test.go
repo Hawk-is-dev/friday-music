@@ -1,7 +1,11 @@
 package main
 
 import (
+	"encoding/base64"
+	"os"
+	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -50,5 +54,52 @@ func TestShuffleLeavesShortQueueUnchanged(t *testing.T) {
 	}
 	if !reflect.DeepEqual(s.queue, before) {
 		t.Fatalf("single-item queue changed: %#v", s.queue)
+	}
+}
+
+func TestParseYtDlpMetadata(t *testing.T) {
+	id, title, err := parseYtDlpMetadata("abc123\n  A Sample Track  \n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id != "abc123" || title != "A Sample Track" {
+		t.Fatalf("metadata = (%q, %q), want (%q, %q)", id, title, "abc123", "A Sample Track")
+	}
+	if _, _, err := parseYtDlpMetadata("\n"); err == nil {
+		t.Fatal("expected an error for empty metadata")
+	}
+}
+
+func TestPrepareYtDlpCookiesFromBase64(t *testing.T) {
+	dir := t.TempDir()
+	cookieText := "# Netscape HTTP Cookie File\nexample.com\tTRUE\t/\tFALSE\t0\tname\tvalue\n"
+	t.Setenv("COOKIES_PATH", "")
+	t.Setenv("COOKIES_B64", base64.StdEncoding.EncodeToString([]byte(cookieText)))
+	path, cleanup, err := prepareYtDlpCookies(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if path == "" {
+		t.Fatal("expected a temporary cookie path")
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != cookieText {
+		t.Fatalf("cookie content mismatch: %q", got)
+	}
+	cleanup()
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("temporary cookie file still exists after cleanup: %v", err)
+	}
+}
+
+func TestPrepareYtDlpCookiesRejectsMissingPath(t *testing.T) {
+	t.Setenv("COOKIES_PATH", filepath.Join(t.TempDir(), "missing-cookies.txt"))
+	t.Setenv("COOKIES_B64", "")
+	_, _, err := prepareYtDlpCookies(".")
+	if err == nil || !strings.Contains(err.Error(), "COOKIES_PATH") {
+		t.Fatalf("expected missing COOKIES_PATH error, got %v", err)
 	}
 }
