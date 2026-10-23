@@ -211,7 +211,7 @@ func (b *bot) handleStop(m *telegram.NewMessage) error {
 func (b *bot) handleLeave(m *telegram.NewMessage) error {
 	s := b.mgr.get(m.ChatID())
 	if err := s.leave(); err != nil { return reply2(m, "Leave failed: "+err.Error()) }
-	b.mgr.drop(m.ChatID()); return reply2(m, "Left the voice chat.")
+	b.mgr.dropIfSame(m.ChatID(), s); return reply2(m, "Left the voice chat.")
 }
 func (b *bot) handleVolume(m *telegram.NewMessage) error {
 	v, err := strconv.Atoi(strings.TrimSpace(m.Args()))
