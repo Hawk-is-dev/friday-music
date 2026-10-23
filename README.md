@@ -37,7 +37,7 @@ go mod tidy
 go run .
 ```
 
-Add both the bot account and assistant user account to the group. Start a group voice chat before using playback commands. The `/play` command supports YouTube search queries and HTTP(S) URLs through `yt-dlp`, as well as replies to Telegram media. `/vplay` currently plays replied video media; video URL support is basic and depends on the source format.
+Add the bot account to the group and make it an administrator with permission to invite users. Start a group voice chat before using playback commands. When `/play`, `/vplay`, or `/vp9play` is used, FRIDAY tries to create a short-lived, single-use invite link and have the assistant user account join the group automatically. This works for public and private supergroups when Telegram permits the bot to create invite links; it is not guaranteed if the bot lacks admin/invite permission, join approval is required, or Telegram restricts the assistant account. The assistant then attempts to join the active voice chat. The `/play` command supports YouTube search queries and HTTP(S) URLs through `yt-dlp`, as well as replies to Telegram media. `/vplay` currently plays replied video media; video URL support is basic and depends on the source format.
 
 ## Deployment
 
