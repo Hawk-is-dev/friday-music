@@ -135,5 +135,5 @@ func mediaTitle(m *telegram.NewMessage) string {
 	return "telegram-media"
 }
 func sanitize(name string) string {
-	return strings.NewReplacer("/", "_", "\\", "_", ":", "_", "*", "_", "?", "_", "\" ", "_", "<", "_", ">", "_", "|", "_", " ", "_").Replace(name)
+	return strings.NewReplacer("/", "_", "\\", "_", ":", "_", "*", "_", "?", "_", "\"", "_", "<", "_", ">", "_", "|", "_", " ", "_").Replace(name)
 }
