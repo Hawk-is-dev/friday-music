@@ -81,6 +81,7 @@ func main() {
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	<-sig
 	log.Println("FRIDAY Music shutting down")
+	b.mgr.shutdownAll()
 	_ = assistant.Terminate()
 	_ = botClient.Terminate()
 }
