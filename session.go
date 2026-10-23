@@ -29,6 +29,7 @@ type session struct {
 	player *gortc.Player
 	gen uint64
 	playing bool
+	closed bool
 	volume int
 	useVP9 bool
 	lastBwe gortc.BandwidthEstimate
@@ -66,6 +67,9 @@ func (m *manager) dropIfSame(chatID int64, expected *session) {
 func (s *session) enqueueTrack(factory clientFactory, chatID any, t track) (int, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.closed {
+		return 0, false, fmt.Errorf("playback session is closed; retry the command")
+	}
 	if s.call == nil {
 		call := factory(s.useVP9)
 		call.OnParticipant(func(ev gortc.ParticipantEvent, p gortc.Participant) {
@@ -109,11 +113,12 @@ func (s *session) startNext() {
 	if len(s.queue) == 0 {
 		s.playing = false
 		s.current = nil
+		s.closed = true
 		call := s.call
 		s.call = nil
+		s.mgr.dropIfSame(s.chatID, s)
 		s.mu.Unlock()
 		if call != nil { _ = call.Leave() }
-		s.mgr.dropIfSame(s.chatID, s)
 		return
 	}
 	next := s.queue[0]
@@ -168,7 +173,11 @@ func (s *session) stop() {
 }
 func (s *session) leave() error {
 	s.stop()
-	s.mu.Lock(); call := s.call; s.call = nil; s.mu.Unlock()
+	s.mu.Lock()
+	s.closed = true
+	call := s.call
+	s.call = nil
+	s.mu.Unlock()
 	if call != nil { return call.Leave() }
 	return nil
 }
