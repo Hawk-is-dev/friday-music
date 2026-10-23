@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"strings"
 	"syscall"
 
 	"github.com/amarnathcjd/gortc"
@@ -44,6 +45,16 @@ func main() {
 		log.Fatalf("assistant user session required: %v", err)
 	}
 
+	level := slog.LevelInfo
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("LOG_LEVEL"))) {
+	case "debug":
+		level = slog.LevelDebug
+	case "warn", "warning":
+		level = slog.LevelWarn
+	case "error":
+		level = slog.LevelError
+	}
+
 	downDir := os.Getenv("DOWNLOAD_DIR")
 	if downDir == "" { downDir = "downloads" }
 	if err := os.MkdirAll(downDir, 0o755); err != nil {
@@ -52,14 +63,14 @@ func main() {
 
 	b := &bot{
 		client: botClient, assistant: assistant, mgr: newManager(),
-		logLevel: gortc.WithLogger(gortc.NewLogger(slog.LevelInfo)), downDir: downDir,
+		logLevel: gortc.WithLogger(gortc.NewLogger(level)), downDir: downDir,
 	}
 	b.register()
 
 	if me, err := botClient.GetMe(); err == nil {
 		log.Printf("FRIDAY Music is online as @%s", me.Username)
 	}
-	log.Println("Commands: /start /help /play /vplay /skip /pause /resume /stop /leave /volume /queue /playing /stats /participants")
+	log.Println("Commands: /start /help /play /vplay /vp9play /skip /pause /resume /stop /end /leave /volume /queue /shuffle /playing /stats /participants")
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
