@@ -94,14 +94,9 @@ func downloadExternal(ctx context.Context, dir, query string, video bool) (strin
 	if err != nil {
 		return "", "", fmt.Errorf("yt-dlp metadata lookup: %w", err)
 	}
-	lines := strings.SplitN(strings.TrimSpace(string(metaBytes)), "\n", 2)
-	if len(lines) == 0 || strings.TrimSpace(lines[0]) == "" {
-		return "", "", fmt.Errorf("source returned no media ID")
-	}
-	id := strings.TrimSpace(lines[0])
-	title := id
-	if len(lines) > 1 && strings.TrimSpace(lines[1]) != "" {
-		title = strings.TrimSpace(lines[1])
+	id, title, err := parseYtDlpMetadata(string(metaBytes))
+	if err != nil {
+		return "", "", err
 	}
 	base := filepath.Join(dir, sanitize(id))
 	args := []string{"--no-warnings", "--playlist-items", "1", "--force-overwrites"}
@@ -125,6 +120,19 @@ func downloadExternal(ctx context.Context, dir, query string, video bool) (strin
 		return "", "", fmt.Errorf("download completed but expected output %s was not found: %w", filepath.Base(path), err)
 	}
 	return title, path, nil
+}
+
+func parseYtDlpMetadata(output string) (string, string, error) {
+	lines := strings.SplitN(strings.TrimSpace(output), "\n", 2)
+	if len(lines) == 0 || strings.TrimSpace(lines[0]) == "" {
+		return "", "", fmt.Errorf("source returned no media ID")
+	}
+	id := strings.TrimSpace(lines[0])
+	title := id
+	if len(lines) > 1 && strings.TrimSpace(lines[1]) != "" {
+		title = strings.TrimSpace(lines[1])
+	}
+	return id, title, nil
 }
 
 func prepareYtDlpCookies(dir string) (string, func(), error) {
