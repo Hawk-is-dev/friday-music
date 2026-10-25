@@ -72,6 +72,12 @@ func (m *manager) get(chatID int64) *session {
 	return s
 }
 
+func (m *manager) find(chatID int64) *session {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.sessions[chatID]
+}
+
 func (m *manager) dropIfSame(chatID int64, expected *session) {
 	m.mu.Lock()
 	if m.sessions[chatID] == expected {
