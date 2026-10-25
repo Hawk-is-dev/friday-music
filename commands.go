@@ -53,9 +53,10 @@ func (b *bot) handlePlay(video, vp9 bool) telegram.MessageHandler {
 			if replyErr != nil {
 				return edit(status, "FRIDAY MUSIC\nCouldn’t read the replied message.")
 			}
-			if replied.IsMedia() {
+			if isPlayableTelegramMedia(replied) {
 				handledReplyMedia = true
 				t.title = mediaTitle(replied)
+				t.duration = mediaDuration(replied)
 				t.path, err = replied.Download(&telegram.DownloadOptions{
 					FileName: filepath.Join(b.downDir, fmt.Sprintf("%d_%d_%s", m.ChatID(), replied.ID, sanitize(t.title))),
 				})
@@ -404,16 +405,43 @@ func (b *bot) handleParticipants(m *telegram.NewMessage) error {
 }
 func reply2(m *telegram.NewMessage, text string) error { _, err := m.Reply(text); return err }
 func edit(m *telegram.NewMessage, text string) error { if m == nil { return nil }; _, err := m.Edit(text); return err }
+func isPlayableTelegramMedia(m *telegram.NewMessage) bool {
+	return m != nil && (m.Audio() != nil || m.Voice() != nil || m.Video() != nil)
+}
+
 func mediaTitle(m *telegram.NewMessage) string {
-	if a := m.Audio(); a != nil {
-		for _, attr := range a.Attributes {
-			if t, ok := attr.(*telegram.DocumentAttributeAudio); ok && t.Title != "" {
-				if t.Performer != "" { return t.Performer+" - "+t.Title }; return t.Title
+	if m == nil { return "telegram-media" }
+	docs := []*telegram.DocumentObj{m.Audio(), m.Voice(), m.Video()}
+	for _, doc := range docs {
+		if doc == nil { continue }
+		for _, attr := range doc.Attributes {
+			if audio, ok := attr.(*telegram.DocumentAttributeAudio); ok && audio.Title != "" {
+				if audio.Performer != "" { return audio.Performer + " - " + audio.Title }
+				return audio.Title
 			}
-			if f, ok := attr.(*telegram.DocumentAttributeFilename); ok && f.FileName != "" { return f.FileName }
+			if filename, ok := attr.(*telegram.DocumentAttributeFilename); ok && filename.FileName != "" {
+				return filename.FileName
+			}
 		}
 	}
-	return "telegram-media"
+	return "Telegram media"
+}
+
+func mediaDuration(m *telegram.NewMessage) float64 {
+	if m == nil { return 0 }
+	docs := []*telegram.DocumentObj{m.Audio(), m.Voice(), m.Video()}
+	for _, doc := range docs {
+		if doc == nil { continue }
+		for _, attr := range doc.Attributes {
+			switch value := attr.(type) {
+			case *telegram.DocumentAttributeAudio:
+				if value.Duration > 0 { return float64(value.Duration) }
+			case *telegram.DocumentAttributeVideo:
+				if value.Duration > 0 { return float64(value.Duration) }
+			}
+		}
+	}
+	return 0
 }
 func brief(s string, limit int) string {
 	s = strings.Join(strings.Fields(s), " ")
