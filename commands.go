@@ -47,24 +47,26 @@ func (b *bot) handlePlay(video, vp9 bool) telegram.MessageHandler {
 		var t track
 		var err error
 
+		handledReplyMedia := false
 		if m.IsReply() {
 			replied, replyErr := m.GetReplyMessage()
 			if replyErr != nil {
-				return edit(status, "✦ FRIDAY MUSIC\n└ Couldn’t read the replied message.")
+				return edit(status, "FRIDAY MUSIC\nCouldn’t read the replied message.")
 			}
-			if !replied.IsMedia() {
-				return edit(status, "✦ FRIDAY MUSIC\n└ Reply to an audio or video file.")
+			if replied.IsMedia() {
+				handledReplyMedia = true
+				t.title = mediaTitle(replied)
+				t.path, err = replied.Download(&telegram.DownloadOptions{
+					FileName: filepath.Join(b.downDir, fmt.Sprintf("%d_%d_%s", m.ChatID(), replied.ID, sanitize(t.title))),
+				})
 			}
-			t.title = mediaTitle(replied)
-			t.path, err = replied.Download(&telegram.DownloadOptions{
-				FileName: filepath.Join(b.downDir, fmt.Sprintf("%d_%d_%s", m.ChatID(), replied.ID, sanitize(t.title))),
-			})
-		} else if strings.TrimSpace(m.Args()) != "" {
+		}
+		if !handledReplyMedia && strings.TrimSpace(m.Args()) != "" {
 			ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
 			defer cancel()
 			t, err = downloadExternal(ctx, b.downDir, strings.TrimSpace(m.Args()), video)
-		} else {
-			return edit(status, "✦ HOW TO PLAY\n├ /play <song name or URL>\n├ Reply to audio with /play\n└ Reply to video with /vplay")
+		} else if !handledReplyMedia {
+			return edit(status, "HOW TO PLAY\n/play <song name or URL>\nReply to audio with /play\nReply to video with /vplay")
 		}
 		if err != nil {
 			return edit(status, "✦ DOWNLOAD FAILED\n├ "+brief(err.Error(), 700)+"\n└ Check the yt-dlp extraction details above.")

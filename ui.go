@@ -27,7 +27,7 @@ func (b *bot) startKeyboard() telegram.ReplyMarkup {
 func (b *bot) handleStart(m *telegram.NewMessage) error {
 	name := strings.TrimSpace(os.Getenv("BOT_NAME"))
 	if name == "" { name = "FRIDAY" }
-	caption := fmt.Sprintf("<b>FRIDAY MUSIC</b>\n\nHey, %s.\n\nA Telegram voice-chat music bot.\nPlay tracks, manage the queue, and control playback from one panel.\n\nUse /help to see available commands.", html.EscapeString(senderName(m)))
+	caption := fmt.Sprintf("<b>%s MUSIC</b>\n\nHey, %s.\n\nA Telegram voice-chat music bot.\nPlay tracks, manage the queue, and control playback from one panel.\n\nUse /help to see available commands.", html.EscapeString(name), html.EscapeString(senderName(m)))
 	if m.IsGroup() {
 		caption = fmt.Sprintf("<b>FRIDAY MUSIC</b>\n\n%s is ready in <b>%s</b>.\n\nStart a voice chat, then use /play <code>song name</code> to begin.", html.EscapeString(name), html.EscapeString(chatTitle(m)))
 	}
@@ -99,7 +99,7 @@ func (b *bot) trackCaption(t track, paused bool) string {
 		seconds := int(t.duration)
 		durationText = fmt.Sprintf("%02d:%02d", seconds/60, seconds%60)
 	}
-	caption := fmt.Sprintf("<b>FRIDAY MUSIC</b>\n\n<b>%s</b>\n%s · %s\n", html.EscapeString(t.title), state, mode)
+	caption := fmt.Sprintf("<b>%s MUSIC</b>\n\n<b>%s</b>\n%s · %s\n", html.EscapeString(name), html.EscapeString(t.title), state, mode)
 	if t.uploader != "" { caption += "Channel: " + html.EscapeString(t.uploader) + "\n" }
 	caption += "Duration: " + durationText + "\n"
 	if t.requestedBy != "" {
@@ -179,7 +179,7 @@ func (b *bot) handleUICallback(cb *telegram.CallbackQuery) error {
 	s := b.mgr.get(chatID)
 	switch strings.TrimPrefix(data, "friday:") {
 	case "home":
-		_, err := cb.Edit("<b>FRIDAY MUSIC</b>\n\nA Telegram voice-chat music bot.\nPlay tracks, manage the queue, and control playback from one panel.\n\nUse /help to see available commands.", &telegram.SendOptions{ParseMode: "html", ReplyMarkup: b.startKeyboard()})
+		_, err := cb.Edit(fmt.Sprintf("<b>%s MUSIC</b>\n\nA Telegram voice-chat music bot.\nPlay tracks, manage the queue, and control playback from one panel.\n\nUse /help to see available commands.", html.EscapeString(strings.TrimSpace(os.Getenv("BOT_NAME")))), &telegram.SendOptions{ParseMode: "html", ReplyMarkup: b.startKeyboard()})
 		_, _ = cb.Answer("Home")
 		return err
 	case "help":

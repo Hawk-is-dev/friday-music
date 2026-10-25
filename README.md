@@ -32,7 +32,7 @@ Optional:
 - LOG_LEVEL — defaults to info
 - DURATION_LIMIT — track duration limit in minutes, defaults to 30, accepted range 1–240. The older MAX_DURATION_MINUTES name remains supported as a fallback.
 
-The owner ID used by /gensession is configured in code, so you do not need an OWNER_ID variable. The original Sanya project has additional variables for MongoDB/Redis, AI tools, playlists, and administration features that this music-focused Go implementation does not currently use.
+The owner ID used by /gensession is configured in code, so you do not need an OWNER_ID variable. Sanya also defines MONGO_DB_URI, REDIS_URL, REDIS_TOKEN, LOGGER_ID, POST_CHANNEL_ID, GROQ_API_KEY, GROQ_MODEL, API_KEY, API_URL, VERCEL_SEARCH_URL, LASTFM_API_KEY, and STRING_SESSION2 through STRING_SESSION7. FRIDAY does not currently use these: database persistence, AI tools, logging-channel features, and multiple assistant accounts have not been ported, so adding those variables alone will not enable them.
 
 ## Setup
 
