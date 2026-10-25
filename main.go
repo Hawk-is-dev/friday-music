@@ -28,7 +28,7 @@ func main() {
 	// SESSION_STRING is optional during first startup so the owner can generate it
 	// through /gensession. Never print the value itself.
 	sessionString := strings.TrimSpace(os.Getenv("SESSION_STRING"))
-	if strings.ContainsAny(sessionString, "\\r\\n\\t ") {
+	if strings.ContainsAny(sessionString, "\r\n\t ") {
 		log.Printf("SESSION_STRING contains embedded whitespace; assistant login will be skipped. Regenerate it with /gensession.")
 		sessionString = ""
 	}
