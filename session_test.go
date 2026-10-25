@@ -203,3 +203,27 @@ func TestRepeatModesAreMutuallyExclusive(t *testing.T) {
 		t.Fatal("queue repeat should remain enabled")
 	}
 }
+
+func TestParseYtDlpDuration(t *testing.T) {
+	if got, ok := parseYtDlpDuration("abc123\\nSample track\\n185.5"); !ok || got != 185.5 {
+		t.Fatalf("parseYtDlpDuration() = %v, %v; want 185.5, true", got, ok)
+	}
+	if _, ok := parseYtDlpDuration("abc123\\nLive stream\\nNA"); ok {
+		t.Fatal("expected unknown duration to be reported as unavailable")
+	}
+}
+
+func TestMaxDurationMinutesDefaultsAndValidates(t *testing.T) {
+	t.Setenv("MAX_DURATION_MINUTES", "")
+	if got := maxDurationMinutes(); got != 30 {
+		t.Fatalf("default duration = %d, want 30", got)
+	}
+	t.Setenv("MAX_DURATION_MINUTES", "999")
+	if got := maxDurationMinutes(); got != 30 {
+		t.Fatalf("invalid duration = %d, want default 30", got)
+	}
+	t.Setenv("MAX_DURATION_MINUTES", "45")
+	if got := maxDurationMinutes(); got != 45 {
+		t.Fatalf("configured duration = %d, want 45", got)
+	}
+}
