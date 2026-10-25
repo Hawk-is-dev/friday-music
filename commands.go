@@ -112,7 +112,7 @@ func downloadExternal(ctx context.Context, dir, query string, video bool) (strin
 	if err != nil {
 		return "", "", err
 	}
-	base := filepath.Join(dir, sanitize(id))
+	base := filepath.Join(dir, fmt.Sprintf("%s_%d", sanitize(id), time.Now().UnixNano()))
 	args := []string{"--no-warnings", "--playlist-items", "1", "--force-overwrites"}
 	args = append(args, cookieArgs...)
 	if video {
@@ -123,7 +123,8 @@ func downloadExternal(ctx context.Context, dir, query string, video bool) (strin
 	args = append(args, "-o", base+".%(ext)s", target)
 	cmd := exec.CommandContext(ctx, "yt-dlp", args...)
 	if output, err := cmd.CombinedOutput(); err != nil {
-		return "", "", fmt.Errorf("yt-dlp download: %w (%s)", err, strings.TrimSpace(string(output)))
+		for _, partial := range mustGlob(base + ".*") { removeFile(partial) }
+		return "", "", fmt.Errorf("yt-dlp download: %w (%s)", err, brief(strings.TrimSpace(string(output)), 350))
 	}
 	ext := ".mp3"
 	if video {
@@ -309,6 +310,19 @@ func mediaTitle(m *telegram.NewMessage) string {
 	}
 	return "telegram-media"
 }
+func brief(s string, limit int) string {
+	s = strings.Join(strings.Fields(s), " ")
+	if limit > 0 && len(s) > limit {
+		return s[:limit] + "…"
+	}
+	return s
+}
+
+func mustGlob(pattern string) []string {
+	matches, _ := filepath.Glob(pattern)
+	return matches
+}
+
 func sanitize(name string) string {
 	return strings.NewReplacer("/", "_", "\\", "_", ":", "_", "*", "_", "?", "_", "\"", "_", "<", "_", ">", "_", "|", "_", " ", "_").Replace(name)
 }
