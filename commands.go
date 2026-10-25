@@ -52,15 +52,18 @@ func (b *bot) handlePlay(video, vp9 bool) telegram.MessageHandler {
 		}
 		if err != nil { return edit(status, "✦ DOWNLOAD FAILED\n├ "+err.Error()+"\n└ Check yt-dlp and ffmpeg setup.") }
 
-		// If the assistant user is not in the group yet, try to invite it using
-		// a short-lived, single-use link created by the bot. This requires the
-		// bot to be an administrator with invite-user permission.
-		inviteErr := b.tryAutoJoinAssistant(m.ChatID())
-
 		s := b.mgr.get(m.ChatID())
 		s.mu.Lock()
 		s.useVP9 = vp9
+		needsAutoJoin := s.call == nil
 		s.mu.Unlock()
+
+		// Only attempt the invite flow when a new voice-chat session is needed.
+		// Adding songs to an existing queue should not create extra invite links.
+		var inviteErr error
+		if needsAutoJoin {
+			inviteErr = b.tryAutoJoinAssistant(m.ChatID())
+		}
 		pos, startNow, enqueueErr := s.enqueueTrack(b.callFactory, m.ChatID(), track{title: title, path: path, video: video, vp9: vp9})
 		if enqueueErr != nil {
 			removeFile(path)
@@ -184,7 +187,7 @@ func prepareYtDlpCookies(dir string) (string, func(), error) {
 
 func (b *bot) register() {
 	b.client.OnCommand("start", func(m *telegram.NewMessage) error { return reply2(m, "✦ FRIDAY MUSIC\nYour voice-chat soundtrack is ready.\n\nType /help to explore commands.") })
-	b.client.OnCommand("help", func(m *telegram.NewMessage) error { return reply2(m, "✦ FRIDAY MUSIC · COMMANDS\n━━━━━━━━━━━━━━\n♫ PLAYBACK\n├ /play <song or URL> — play music\n├ /vplay — play replied video\n├ /vp9play — video with VP9\n├ /playing — current track\n└ /queue — upcoming tracks\n\n◈ CONTROLS\n├ /pause · /resume · /skip\n├ /stop — stop and clear queue\n├ /leave — leave voice chat\n├ /shuffle — mix the queue\n└ /volume <0-200> — volume\n\n⌁ INFO\n├ /stats — stream status\n└ /participants — voice chat members\n━━━━━━━━━━━━━━\nMade for late-night listening.") })
+	b.client.OnCommand("help", func(m *telegram.NewMessage) error { return reply2(m, "✦ FRIDAY MUSIC · COMMANDS\n━━━━━━━━━━━━━━\n♫ PLAYBACK\n├ /play <song or URL> — play music\n├ /vplay — play replied video\n├ /vp9play — video with VP9\n├ /playing — current track\n├ /queue — upcoming tracks\n├ /loop — repeat current track\n├ /remove <number> — remove queued track\n└ /clear — clear upcoming tracks\n\n◈ CONTROLS\n├ /pause · /resume · /skip\n├ /stop — stop and clear queue\n├ /leave — leave voice chat\n├ /shuffle — mix the queue\n└ /volume <0-200> — volume\n\n⌁ INFO\n├ /stats — stream status\n└ /participants — voice chat members\n━━━━━━━━━━━━━━\nMade for late-night listening.") })
 	b.client.OnCommand("play", b.handlePlay(false, false))
 	b.client.OnCommand("vplay", b.handlePlay(true, false))
 	b.client.OnCommand("vp9play", b.handlePlay(true, true))
@@ -196,6 +199,9 @@ func (b *bot) register() {
 	b.client.OnCommand("leave", b.handleLeave)
 	b.client.OnCommand("volume", b.handleVolume)
 	b.client.OnCommand("queue", b.handleQueue)
+	b.client.OnCommand("loop", b.handleLoop)
+	b.client.OnCommand("remove", b.handleRemove)
+	b.client.OnCommand("clear", b.handleClear)
 	b.client.OnCommand("shuffle", b.handleShuffle)
 	b.client.OnCommand("playing", b.handlePlaying)
 	b.client.OnCommand("stats", b.handleStats)
@@ -244,6 +250,33 @@ func (b *bot) handleQueue(m *telegram.NewMessage) error {
 	}
 	return reply2(m, out.String())
 }
+func (b *bot) handleLoop(m *telegram.NewMessage) error {
+	enabled := b.mgr.get(m.ChatID()).toggleLoop()
+	if enabled {
+		return reply2(m, "↻ REPEAT ENABLED\\n╰─ The current track will repeat until /loop is used again.")
+	}
+	return reply2(m, "↻ REPEAT DISABLED")
+}
+
+func (b *bot) handleClear(m *telegram.NewMessage) error {
+	count := b.mgr.get(m.ChatID()).clearQueue()
+	return reply2(m, fmt.Sprintf("⌫ QUEUE CLEARED\\n╰─ Removed %d upcoming track(s).", count))
+}
+
+func (b *bot) handleRemove(m *telegram.NewMessage) error {
+	index, err := strconv.Atoi(strings.TrimSpace(m.Args()))
+	if err != nil || index < 1 {
+		return reply2(m, "⌫ Usage: /remove <queue number>")
+	}
+	s := b.mgr.get(m.ChatID())
+	removed, ok := s.removeQueued(index)
+	if !ok {
+		return reply2(m, "⌫ That queue position does not exist. Check /queue.")
+	}
+	removeFile(removed.path)
+	return reply2(m, "⌫ REMOVED FROM QUEUE\\n╰─ "+removed.title)
+}
+
 func (b *bot) handlePlaying(m *telegram.NewMessage) error {
 	title, ok := b.mgr.get(m.ChatID()).nowPlaying()
 	if !ok { return reply2(m, "♫ NOTHING PLAYING\n╰─ Queue a track with /play.") }
