@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/amarnathcjd/gortc"
 	"github.com/amarnathcjd/gogram/telegram"
@@ -45,7 +46,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("create bot client: %v", err)
 	}
-	if err := botClient.LoginBot(mustEnv("BOT_TOKEN")); err != nil {
+	if err := loginBotWithFloodWait(botClient, mustEnv("BOT_TOKEN")); err != nil {
 		log.Fatalf("login bot: %v", err)
 	}
 
@@ -106,4 +107,34 @@ func main() {
 	b.mgr.shutdownAll()
 	if assistant != nil { _ = assistant.Terminate() }
 	_ = botClient.Terminate()
+}
+
+
+// loginBotWithFloodWait avoids crashing/restarting the container while Telegram
+// enforces an authentication flood wait. A restart loop would keep hammering
+// AuthImportBotAuthorization and delay recovery.
+func loginBotWithFloodWait(client *telegram.Client, token string) error {
+	for {
+		err := client.LoginBot(token)
+		if err == nil {
+			return nil
+		}
+		message := err.Error()
+		if !strings.Contains(message, "FLOOD_WAIT") {
+			return err
+		}
+
+		waitSeconds := 60
+		if marker := strings.Index(message, "Please wait "); marker >= 0 {
+			rest := strings.TrimSpace(message[marker+len("Please wait "):])
+			if fields := strings.Fields(rest); len(fields) > 0 {
+				if parsed, parseErr := strconv.Atoi(strings.TrimRight(fields[0], "s.")); parseErr == nil && parsed > 0 {
+					waitSeconds = parsed
+				}
+			}
+		}
+		waitSeconds += 5
+		log.Printf("Telegram is rate-limiting bot login; waiting %d seconds before retrying. Keep this deployment running.", waitSeconds)
+		time.Sleep(time.Duration(waitSeconds) * time.Second)
+	}
 }
