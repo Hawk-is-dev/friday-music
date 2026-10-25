@@ -15,6 +15,7 @@ A Go-based Telegram group voice-chat music bot focused on per-chat playback sess
 - `/remove <number>` — remove an upcoming queue item
 - `/clear` — clear upcoming tracks without stopping the current track
 - `/stats`, `/participants`
+- `/gensession` — owner-only assistant-session setup in private chat
 
 Each group has its own queue/session, so different groups can run separate playback sessions. The queue accepts up to 50 upcoming tracks per group to prevent unbounded memory/disk usage. External media is limited to 30 minutes by default; set `MAX_DURATION_MINUTES` (1–240) to change this. Unknown-duration sources are allowed but still depend on yt-dlp support. Downloads use unique filenames to avoid collisions when the same song is requested in parallel. `/clear` removes only upcoming tracks; `/stop` clears the queue and leaves the voice chat.
 
@@ -31,10 +32,12 @@ The streaming layer uses [gortc](https://github.com/AmarnathCJD/gortc) and [gogr
 ## Setup
 
 1. Copy `.env.example` to `.env`.
-2. Fill in `BOT_TOKEN`, `API_ID`, `API_HASH`, and `SESSION_STRING`.
-3. Optionally set `COOKIES_B64` (base64-encoded Netscape cookies file) or `COOKIES_PATH` if your source requires YouTube cookies. Keep these secret.
-4. Never commit `.env`, cookies, or any session files.
-5. Run:
+2. Fill in `BOT_TOKEN`, `API_ID`, `API_HASH`, and `OWNER_ID` (your numeric Telegram user ID).
+3. `SESSION_STRING` is optional on first startup. Start FRIDAY, open its private chat as the configured owner, and use `/gensession`. Follow the prompts with `/sessionphone`, `/sessioncode`, and, if needed, `/sessionpassword`.
+4. Copy the generated string into Railway Variables as `SESSION_STRING`, then redeploy. FRIDAY cannot update Railway variables automatically.
+5. Optionally set `COOKIES_B64` (base64-encoded Netscape cookies file) or `COOKIES_PATH` if your source requires YouTube cookies. Keep these secret.
+6. Never commit `.env`, cookies, or any session files.
+7. Run:
 
 ```sh
 go mod tidy
@@ -45,7 +48,7 @@ Add the bot account to the group and make it an administrator with permission to
 
 ## Deployment
 
-A Dockerfile and Railway configuration are included. Set environment variables in the hosting dashboard, and ensure the deployment supports Go 1.25.3+, persistent storage for downloads, and outbound Telegram connectivity. Set `SESSION_STRING` for the assistant user session. Optional `COOKIES_B64` or `COOKIES_PATH` can supply yt-dlp cookies; do not commit either value.
+A Dockerfile and Railway configuration are included. Set environment variables in the hosting dashboard, and ensure the deployment supports Go 1.25.3+, persistent storage for downloads, and outbound Telegram connectivity. Set `OWNER_ID` to your numeric Telegram user ID. `SESSION_STRING` may be omitted for first startup: FRIDAY stays online in setup mode and lets the owner generate a Gogram session with `/gensession`. Copy the generated value into Railway Variables as `SESSION_STRING` and redeploy. Optional `COOKIES_B64` or `COOKIES_PATH` can supply yt-dlp cookies; do not commit either value. Session strings are account credentials; keep them private and delete the bot message after copying.
 
 ## Roadmap / not implemented yet
 
