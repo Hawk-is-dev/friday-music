@@ -290,6 +290,7 @@ func (s *session) clearQueue() int {
 	s.mu.Lock()
 	queued := s.queue
 	s.queue = nil
+	s.loopQueue = false
 	s.mu.Unlock()
 	for _, t := range queued {
 		removeFile(t.path)
