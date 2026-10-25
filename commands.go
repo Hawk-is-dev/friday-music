@@ -165,13 +165,13 @@ func downloadExternal(ctx context.Context, dir, query string, video bool) (track
 	// with transient extractor changes; it cannot bypass private/blocked media.
 	extractorVariants := [][]string{
 		{},
-		{"--extractor-args", "youtube:player_client=android,web"},
+		{"--extractor-args", "youtube:player_client=mweb,tv"},
 	}
 	var t track
 	var lastErr string
 	for attempt, extra := range extractorVariants {
 		metaArgs := []string{
-			"--ignore-config", "--no-warnings", "--no-playlist", "--skip-download",
+			"--ignore-config", "--no-warnings", "--no-playlist", "--skip-download", "--ignore-no-formats-error",
 			"--retries", "3", "--extractor-retries", "3", "--socket-timeout", "25",
 			"--js-runtimes", "deno",
 			"--print", "%(id)s\\t%(title)s\\t%(duration)s\\t%(thumbnail)s\\t%(uploader)s\\t%(webpage_url)s",
@@ -224,13 +224,13 @@ func downloadExternal(ctx context.Context, dir, query string, video bool) (track
 	if video {
 		attempts = []downloadAttempt{
 			{"mp4-compatible", []string{"-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best", "--merge-output-format", "mp4"}},
-			{"alternate-format", []string{"--extractor-args", "youtube:player_client=android,web", "-f", "bestvideo+bestaudio/best", "--merge-output-format", "mp4"}},
-			{"single-file-fallback", []string{"-f", "best", "--extractor-args", "youtube:player_client=android,web"}},
+			{"alternate-format", []string{"--extractor-args", "youtube:player_client=mweb,tv", "-f", "bestvideo+bestaudio/best", "--merge-output-format", "mp4"}},
+			{"single-file-fallback", []string{"-f", "best", "--extractor-args", "youtube:player_client=mweb,tv"}},
 		}
 	} else {
 		attempts = []downloadAttempt{
 			{"best-audio-mp3", []string{"-f", "bestaudio/best", "-x", "--audio-format", "mp3", "--audio-quality", "0"}},
-			{"alternate-client-mp3", []string{"--extractor-args", "youtube:player_client=android,web", "-f", "bestaudio/best", "-x", "--audio-format", "mp3", "--audio-quality", "0"}},
+			{"alternate-client-mp3", []string{"--extractor-args", "youtube:player_client=mweb,tv", "-f", "bestaudio/best", "-x", "--audio-format", "mp3", "--audio-quality", "0"}},
 			{"best-format-fallback", []string{"-f", "best", "-x", "--audio-format", "mp3", "--audio-quality", "0"}},
 		}
 	}

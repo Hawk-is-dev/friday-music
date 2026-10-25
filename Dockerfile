@@ -16,8 +16,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
 COPY --from=deno /deno /usr/local/bin/deno
 WORKDIR /app
 COPY --from=build /out/friday /app/friday
-# Include the repository-root cookies.txt in the runtime image.
-COPY --from=build /src/cookies.txt /app/cookies.txt
 RUN mkdir -p /app/downloads
 ENV DOWNLOAD_DIR=/app/downloads
 CMD ["/app/friday"]
