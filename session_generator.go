@@ -20,14 +20,10 @@ type sessionFlow struct {
 	started  bool
 }
 
-func (b *bot) configuredOwnerID() int64 {
-	id, _ := strconv.ParseInt(strings.TrimSpace(os.Getenv("OWNER_ID")), 10, 64)
-	return id
-}
+const configuredOwnerID int64 = 6572631282
 
 func (b *bot) sessionOwnerMessage(m *telegram.NewMessage) bool {
-	ownerID := b.configuredOwnerID()
-	return ownerID > 0 && m.IsPrivate() && m.SenderID() == ownerID
+	return m.IsPrivate() && m.SenderID() == configuredOwnerID
 }
 
 func (b *bot) startSessionGeneration(m *telegram.NewMessage) error {
