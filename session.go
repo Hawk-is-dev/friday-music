@@ -17,6 +17,12 @@ type track struct {
 	path string
 	video bool
 	vp9 bool
+	id string
+	url string
+	thumbnail string
+	uploader string
+	duration float64
+	requested string
 }
 
 type session struct {
@@ -33,6 +39,8 @@ type session struct {
 	loop bool
 	loopQueue bool
 	volume int
+	muted bool
+	volumeBeforeMute int
 	useVP9 bool
 	lastBwe gortc.BandwidthEstimate
 	joinedAt map[int64]bool
@@ -43,6 +51,8 @@ const maxQueuedTracks = 50
 type manager struct {
 	mu sync.Mutex
 	sessions map[int64]*session
+	onTrack func(int64, track)
+	onEnd func(int64)
 }
 
 type clientFactory func(vp9 bool) *gortc.Call
@@ -123,9 +133,11 @@ func (s *session) startNext() {
 		s.closed = true
 		call := s.call
 		s.call = nil
+		onEnd := s.mgr.onEnd
 		s.mgr.dropIfSame(s.chatID, s)
 		s.mu.Unlock()
 		if call != nil { _ = call.Leave() }
+		if onEnd != nil { go onEnd(s.chatID) }
 		return
 	}
 	next := s.queue[0]
@@ -139,12 +151,15 @@ func (s *session) startNext() {
 	player := call.Play(ctx, sourceFor(next))
 	s.player = player
 	volume := s.volume
+	if s.muted { volume = 0 }
+	notify := s.mgr.onTrack
 	s.mu.Unlock()
 
 	if call != nil {
 		_ = call.SetVolume(volume)
 		_ = call.SetVideoStopped(!next.video)
 	}
+	if notify != nil { go notify(s.chatID, next) }
 	go func() {
 		<-player.Done()
 		cancel()
@@ -209,12 +224,39 @@ func (s *session) setVolume(percent int) error {
 	s.mu.Lock()
 	call := s.call
 	s.volume = percent
-	s.mu.Unlock()
-	// Remember the setting even when playback has not started yet.
-	if call == nil {
-		return nil
+	actual := percent
+	if s.muted {
+		s.volumeBeforeMute = percent
+		actual = 0
 	}
-	return call.SetVolume(percent)
+	s.mu.Unlock()
+	if call == nil { return nil }
+	return call.SetVolume(actual)
+}
+
+func (s *session) setMuted(mute bool) error {
+	s.mu.Lock()
+	call := s.call
+	if mute {
+		if !s.muted { s.volumeBeforeMute = s.volume }
+		s.muted = true
+	} else if s.muted {
+		s.muted = false
+		if s.volumeBeforeMute > 0 { s.volume = s.volumeBeforeMute }
+	}
+	actual := s.volume
+	if s.muted { actual = 0 }
+	s.mu.Unlock()
+	if call == nil { return nil }
+	return call.SetVolume(actual)
+}
+
+func (s *session) snapshot() (track, bool, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.current == nil { return track{}, false, false }
+	paused := s.player != nil && s.player.Paused()
+	return *s.current, true, paused
 }
 func (s *session) nowPlaying() (string, bool) {
 	s.mu.Lock(); defer s.mu.Unlock()
