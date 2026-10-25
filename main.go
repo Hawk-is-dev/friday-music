@@ -21,10 +21,6 @@ func main() {
 		}
 	}
 
-	if strings.TrimSpace(os.Getenv("OWNER_ID")) == "" {
-		log.Println("OWNER_ID is not configured; /gensession will remain owner-locked until OWNER_ID is set.")
-	}
-
 	// SESSION_STRING is optional during first startup so the owner can generate it
 	// through /gensession. Never print the value itself.
 	sessionString := strings.TrimSpace(os.Getenv("SESSION_STRING"))
