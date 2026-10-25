@@ -50,7 +50,7 @@ func (b *bot) handlePlay(video, vp9 bool) telegram.MessageHandler {
 		} else {
 			return edit(status, "✦ HOW TO PLAY\n├ /play <song name or URL>\n├ Reply to audio with /play\n└ Reply to video with /vplay")
 		}
-		if err != nil { return edit(status, "✦ DOWNLOAD FAILED\n├ "+err.Error()+"\n└ Check yt-dlp and ffmpeg setup.") }
+		if err != nil { return edit(status, "✦ DOWNLOAD FAILED\n├ "+brief(err.Error(), 500)+"\n└ Check yt-dlp and ffmpeg setup.") }
 
 		s := b.mgr.get(m.ChatID())
 		s.mu.Lock()
@@ -67,9 +67,9 @@ func (b *bot) handlePlay(video, vp9 bool) telegram.MessageHandler {
 		pos, startNow, enqueueErr := s.enqueueTrack(b.callFactory, m.ChatID(), track{title: title, path: path, video: video, vp9: vp9})
 		if enqueueErr != nil {
 			removeFile(path)
-			message := "Could not join voice chat: " + enqueueErr.Error() + "\nMake sure the group has an active voice chat and the bot is an admin allowed to invite users."
+			message := "Could not join voice chat: " + brief(enqueueErr.Error(), 350) + "\nMake sure the group has an active voice chat and the bot is an admin allowed to invite users."
 			if inviteErr != nil {
-				message += "\nAssistant auto-join note: " + inviteErr.Error()
+				message += "\nAssistant auto-join note: " + brief(inviteErr.Error(), 250)
 			}
 			return edit(status, message)
 		}
