@@ -138,9 +138,13 @@ func (s *session) startNext() {
 	ctx, cancel := context.WithCancel(context.Background())
 	player := call.Play(ctx, sourceFor(next))
 	s.player = player
+	volume := s.volume
 	s.mu.Unlock()
 
-	if call != nil { _ = call.SetVideoStopped(!next.video) }
+	if call != nil {
+		_ = call.SetVolume(volume)
+		_ = call.SetVideoStopped(!next.video)
+	}
 	go func() {
 		<-player.Done()
 		cancel()
@@ -202,8 +206,14 @@ func (s *session) leave() error {
 	return nil
 }
 func (s *session) setVolume(percent int) error {
-	s.mu.Lock(); call := s.call; s.volume = percent; s.mu.Unlock()
-	if call == nil { return fmt.Errorf("not in a voice chat") }
+	s.mu.Lock()
+	call := s.call
+	s.volume = percent
+	s.mu.Unlock()
+	// Remember the setting even when playback has not started yet.
+	if call == nil {
+		return nil
+	}
 	return call.SetVolume(percent)
 }
 func (s *session) nowPlaying() (string, bool) {
