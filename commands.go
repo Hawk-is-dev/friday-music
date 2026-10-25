@@ -269,8 +269,8 @@ func (b *bot) handleQueue(m *telegram.NewMessage) error {
 	s := b.mgr.get(m.ChatID()); now, ok := s.nowPlaying(); tracks := s.list()
 	var out strings.Builder
 	if ok { out.WriteString("♫ NOW PLAYING\n╰─ "+now+"\n\n") } else { out.WriteString("♫ NOTHING PLAYING\n\n") }
-	if s.loopEnabled() { out.WriteString("↻ Repeat: current track\\n") }
-	if s.loopQueueEnabled() { out.WriteString("↻ Repeat: queue\\n") }
+	if s.loopEnabled() { out.WriteString("↻ Repeat: current track\n") }
+	if s.loopQueueEnabled() { out.WriteString("↻ Repeat: queue\n") }
 	if len(tracks) == 0 { out.WriteString("╰─ Queue is empty.") } else {
 		out.WriteString("✦ UP NEXT\n")
 		for i, t := range tracks { fmt.Fprintf(&out, "%02d  ·  %s\n", i+1, t.title) }
@@ -280,7 +280,7 @@ func (b *bot) handleQueue(m *telegram.NewMessage) error {
 func (b *bot) handleLoop(m *telegram.NewMessage) error {
 	enabled := b.mgr.get(m.ChatID()).toggleLoop()
 	if enabled {
-		return reply2(m, "↻ REPEAT ENABLED\\n╰─ The current track will repeat until /loop is used again.")
+		return reply2(m, "↻ REPEAT ENABLED\n╰─ The current track will repeat until /loop is used again.")
 	}
 	return reply2(m, "↻ REPEAT DISABLED")
 }
@@ -288,14 +288,14 @@ func (b *bot) handleLoop(m *telegram.NewMessage) error {
 func (b *bot) handleLoopQueue(m *telegram.NewMessage) error {
 	enabled := b.mgr.get(m.ChatID()).toggleLoopQueue()
 	if enabled {
-		return reply2(m, "↻ QUEUE REPEAT ENABLED\\n╰─ Tracks will cycle in queue order.")
+		return reply2(m, "↻ QUEUE REPEAT ENABLED\n╰─ Tracks will cycle in queue order.")
 	}
 	return reply2(m, "↻ QUEUE REPEAT DISABLED")
 }
 
 func (b *bot) handleClear(m *telegram.NewMessage) error {
 	count := b.mgr.get(m.ChatID()).clearQueue()
-	return reply2(m, fmt.Sprintf("⌫ QUEUE CLEARED\\n╰─ Removed %d upcoming track(s).", count))
+	return reply2(m, fmt.Sprintf("⌫ QUEUE CLEARED\n╰─ Removed %d upcoming track(s).", count))
 }
 
 func (b *bot) handleRemove(m *telegram.NewMessage) error {
@@ -309,7 +309,7 @@ func (b *bot) handleRemove(m *telegram.NewMessage) error {
 		return reply2(m, "⌫ That queue position does not exist. Check /queue.")
 	}
 	removeFile(removed.path)
-	return reply2(m, "⌫ REMOVED FROM QUEUE\\n╰─ "+removed.title)
+	return reply2(m, "⌫ REMOVED FROM QUEUE\n╰─ "+removed.title)
 }
 
 func (b *bot) handlePlaying(m *telegram.NewMessage) error {
