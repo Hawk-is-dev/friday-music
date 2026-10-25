@@ -31,6 +31,7 @@ type session struct {
 	playing bool
 	closed bool
 	loop bool
+	loopQueue bool
 	volume int
 	useVP9 bool
 	lastBwe gortc.BandwidthEstimate
@@ -145,9 +146,11 @@ func (s *session) startNext() {
 		cancel()
 		s.mu.Lock()
 		stale := gen != s.gen
-		keepForLoop := !stale && s.loop
-		if keepForLoop {
+		keepForLoop := !stale && (s.loop || s.loopQueue)
+		if !stale && s.loop {
 			s.queue = append([]track{next}, s.queue...)
+		} else if !stale && s.loopQueue {
+			s.queue = append(s.queue, next)
 		}
 		s.mu.Unlock()
 		if !keepForLoop {
@@ -256,6 +259,20 @@ func (s *session) loopEnabled() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.loop
+}
+
+func (s *session) toggleLoopQueue() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.loopQueue = !s.loopQueue
+	if s.loopQueue { s.loop = false }
+	return s.loopQueue
+}
+
+func (s *session) loopQueueEnabled() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.loopQueue
 }
 
 func (s *session) clearQueue() int {
