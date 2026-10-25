@@ -97,7 +97,7 @@ func main() {
 	if me, err := botClient.GetMe(); err == nil {
 		log.Printf("FRIDAY Music is online as @%s", me.Username)
 	}
-	log.Println("Commands: /start /help /play /vplay /vp9play /skip /pause /resume /stop /end /leave /volume /queue /shuffle /playing /stats /participants")
+	log.Println("Commands: /start /help /gensession /sessionphone /sessioncode /sessionpassword /play /vplay /vp9play /skip /pause /resume /stop /end /leave /volume /queue /shuffle /playing /stats /participants")
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
