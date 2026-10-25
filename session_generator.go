@@ -7,7 +7,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/amarnathcjd/gogram/telegram"
@@ -198,5 +197,3 @@ func (b *bot) clearSessionFlow(flow *sessionFlow) {
 	}
 }
 
-// compile-time marker for the flow's synchronization contract
-var _ sync.Locker
