@@ -174,7 +174,7 @@ func downloadExternal(ctx context.Context, dir, query string, video bool) (track
 			"--ignore-config", "--no-warnings", "--no-playlist", "--skip-download", "--ignore-no-formats-error",
 			"--retries", "3", "--extractor-retries", "3", "--socket-timeout", "25",
 			"--js-runtimes", "deno",
-			"--print", "%(id)s\\t%(title)s\\t%(duration)s\\t%(thumbnail)s\\t%(uploader)s\\t%(webpage_url)s",
+			"--print", "%(id)s\t%(title)s\t%(duration)s\t%(thumbnail)s\t%(uploader)s\t%(webpage_url)s",
 		}
 		metaArgs = append(metaArgs, extra...)
 		metaArgs = append(metaArgs, cookieArgs...)
@@ -244,7 +244,7 @@ func downloadExternal(ctx context.Context, dir, query string, video bool) (track
 		var out, stderr bytes.Buffer
 		cmd.Stdout, cmd.Stderr = &out, &stderr
 		if runErr := cmd.Run(); runErr == nil {
-			lines := strings.Split(strings.TrimSpace(out.String()), "\\n")
+			lines := strings.Split(strings.TrimSpace(out.String()), "\n")
 			if len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) != "" {
 				candidate := strings.TrimSpace(lines[len(lines)-1])
 				info, statErr := os.Stat(candidate)
