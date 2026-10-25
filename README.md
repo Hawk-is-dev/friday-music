@@ -21,16 +21,16 @@ Playback is isolated per group. The now-playing card uses the source thumbnail w
 Required:
 - BOT_TOKEN — token from BotFather
 - API_ID and API_HASH — from my.telegram.org
-- STRING_SESSION — assistant user session for voice-chat playback. SESSION_STRING is accepted as a compatibility alias.
+- STRING_SESSION — assistant user session for voice-chat playback (same variable name used by Sanya). SESSION_STRING is accepted as a compatibility alias.
 
 Optional:
 - BOT_NAME — display name, default FRIDAY
-- START_IMG_URL — welcome image URL
-- SUPPORT_CHANNEL and SUPPORT_CHAT — links shown on the start panel
+- START_IMG_URL — welcome image URL (same variable name used by Sanya)
+- SUPPORT_CHANNEL and SUPPORT_CHAT — links shown on the start panel (same variable names used by Sanya)
 - COOKIES_B64 or COOKIES_PATH — optional YouTube cookies, if required
 - DOWNLOAD_DIR — defaults to downloads
 - LOG_LEVEL — defaults to info
-- MAX_DURATION_MINUTES — defaults to 30, accepted range 1–240
+- DURATION_LIMIT — track duration limit in minutes, defaults to 30, accepted range 1–240. The older MAX_DURATION_MINUTES name remains supported as a fallback.
 
 The owner ID used by /gensession is configured in code, so you do not need an OWNER_ID variable. The original Sanya project has additional variables for MongoDB/Redis, AI tools, playlists, and administration features that this music-focused Go implementation does not currently use.
 

@@ -70,6 +70,8 @@ func (b *bot) handlePlay(video, vp9 bool) telegram.MessageHandler {
 			return edit(status, "✦ DOWNLOAD FAILED\n├ "+brief(err.Error(), 700)+"\n└ Check the yt-dlp extraction details above.")
 		}
 		t.video, t.vp9 = video, vp9
+		t.requestedBy = senderName(m)
+		if m.Sender != nil { t.requestedByID = m.Sender.ID }
 		if t.title == "" { t.title = "Telegram media" }
 
 		s := b.mgr.get(m.ChatID())
@@ -215,7 +217,11 @@ func parseYtDlpDuration(output string) (float64, bool) {
 }
 
 func maxDurationMinutes() int {
-	limit, err := strconv.Atoi(strings.TrimSpace(os.Getenv("MAX_DURATION_MINUTES")))
+	// Match Sanya's DURATION_LIMIT variable name; retain the earlier
+	// MAX_DURATION_MINUTES name as a backwards-compatible fallback.
+	raw := strings.TrimSpace(os.Getenv("DURATION_LIMIT"))
+	if raw == "" { raw = strings.TrimSpace(os.Getenv("MAX_DURATION_MINUTES")) }
+	limit, err := strconv.Atoi(raw)
 	if err != nil || limit < 1 || limit > 240 {
 		return 30
 	}

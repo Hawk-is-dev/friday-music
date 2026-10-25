@@ -216,18 +216,24 @@ func TestParseYtDlpDuration(t *testing.T) {
 	}
 }
 
-func TestMaxDurationMinutesDefaultsAndValidates(t *testing.T) {
+func TestDurationLimitUsesSanyaVariableAndLegacyAlias(t *testing.T) {
+	t.Setenv("DURATION_LIMIT", "")
 	t.Setenv("MAX_DURATION_MINUTES", "")
 	if got := maxDurationMinutes(); got != 30 {
 		t.Fatalf("default duration = %d, want 30", got)
 	}
-	t.Setenv("MAX_DURATION_MINUTES", "999")
+	t.Setenv("DURATION_LIMIT", "45")
+	t.Setenv("MAX_DURATION_MINUTES", "20")
+	if got := maxDurationMinutes(); got != 45 {
+		t.Fatalf("DURATION_LIMIT = %d, want 45", got)
+	}
+	t.Setenv("DURATION_LIMIT", "")
+	if got := maxDurationMinutes(); got != 20 {
+		t.Fatalf("legacy duration = %d, want 20", got)
+	}
+	t.Setenv("DURATION_LIMIT", "999")
 	if got := maxDurationMinutes(); got != 30 {
 		t.Fatalf("invalid duration = %d, want default 30", got)
-	}
-	t.Setenv("MAX_DURATION_MINUTES", "45")
-	if got := maxDurationMinutes(); got != 45 {
-		t.Fatalf("configured duration = %d, want 45", got)
 	}
 }
 

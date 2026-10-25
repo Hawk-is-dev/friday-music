@@ -12,14 +12,14 @@ import (
 func (b *bot) startKeyboard() telegram.ReplyMarkup {
 	kb := telegram.NewKeyboard()
 	if b.botUsername != "" {
-		kb.AddRow(telegram.Button.URL("✙ ᴀᴅᴅ ᴍᴇ", "https://t.me/"+b.botUsername+"?startgroup=true"))
+		kb.AddRow(telegram.Button.URL("Add to group", "https://t.me/"+b.botUsername+"?startgroup=true"))
 	}
-	kb.AddRow(telegram.Button.Data("⌯ ᴍᴜsɪᴄ ᴄᴏᴍᴍᴀɴᴅs ⌯", "friday:help"))
+	kb.AddRow(telegram.Button.Data("Music commands", "friday:help"))
 	if support := strings.TrimSpace(os.Getenv("SUPPORT_CHANNEL")); support != "" {
-		kb.AddRow(telegram.Button.URL("⌯ ᴜᴘᴅᴀᴛᴇs ⌯", support))
+		kb.AddRow(telegram.Button.URL("Updates", support))
 	}
 	if support := strings.TrimSpace(os.Getenv("SUPPORT_CHAT")); support != "" {
-		kb.AddRow(telegram.Button.URL("⌯ sᴜᴘᴘᴏʀᴛ ⌯", support))
+		kb.AddRow(telegram.Button.URL("Support", support))
 	}
 	return kb.Build()
 }
@@ -27,9 +27,9 @@ func (b *bot) startKeyboard() telegram.ReplyMarkup {
 func (b *bot) handleStart(m *telegram.NewMessage) error {
 	name := strings.TrimSpace(os.Getenv("BOT_NAME"))
 	if name == "" { name = "FRIDAY" }
-	caption := fmt.Sprintf("𝐻𝑖𝑒𝑒... ᴡᴇʟᴄᴏᴍᴇ %s\n\n» ɪ'ᴍ <b>%s</b>, ʏᴏᴜʀ ᴠᴏɪᴄᴇ-ᴄʜᴀᴛ ᴍᴜsɪᴄ ʙᴏᴛ.\n» ᴘʟᴀʏ sᴏɴɢs, ᴍᴀɴᴀɢᴇ ǫᴜᴇᴜᴇs ᴀɴᴅ ᴄᴏɴᴛʀᴏʟ ᴘʟᴀʏʙᴀᴄᴋ.\n\n» ᴜsᴇ /help ғᴏʀ ᴄᴏᴍᴍᴀɴᴅs.", html.EscapeString(senderName(m)), html.EscapeString(name))
+	caption := fmt.Sprintf("<b>FRIDAY MUSIC</b>\n\nHey, %s.\n\nA Telegram voice-chat music bot.\nPlay tracks, manage the queue, and control playback from one panel.\n\nUse /help to see available commands.", html.EscapeString(senderName(m)))
 	if m.IsGroup() {
-		caption = fmt.Sprintf("❍ <b>%s</b> ɪs ʀᴇᴀᴅʏ.\n\n» ᴛʜᴀɴᴋs ғᴏʀ ᴀᴅᴅɪɴɢ ᴍᴇ ᴛᴏ <b>%s</b>.\n» sᴛᴀʀᴛ ᴀ ᴠᴏɪᴄᴇ ᴄʜᴀᴛ ᴀɴᴅ ᴜsᴇ /play <code>song name</code>.", html.EscapeString(name), html.EscapeString(chatTitle(m)))
+		caption = fmt.Sprintf("<b>FRIDAY MUSIC</b>\n\n%s is ready in <b>%s</b>.\n\nStart a voice chat, then use /play <code>song name</code> to begin.", html.EscapeString(name), html.EscapeString(chatTitle(m)))
 	}
 	imageURL := strings.TrimSpace(os.Getenv("START_IMG_URL"))
 	if imageURL == "" { imageURL = "https://files.catbox.moe/3sbjl5.jpg" }
@@ -61,7 +61,7 @@ func (b *bot) handleHelp(m *telegram.NewMessage) error {
 	_, err := m.Reply(text, &telegram.SendOptions{
 		ParseMode: "html",
 		ReplyMarkup: telegram.NewKeyboard().AddRow(
-			telegram.Button.Data("⌂ ʜᴏᴍᴇ", "friday:home"),
+			telegram.Button.Data("Home", "friday:home"),
 		).Build(),
 	})
 	return err
@@ -90,20 +90,27 @@ func (b *bot) playerKeyboard(chatID int64) telegram.ReplyMarkup {
 func (b *bot) trackCaption(t track, paused bool) string {
 	name := strings.TrimSpace(os.Getenv("BOT_NAME"))
 	if name == "" { name = "FRIDAY" }
-	state := "▶ ɴᴏᴡ ᴘʟᴀʏɪɴɢ"
-	if paused { state = "Ⅱ ᴘʟᴀʏʙᴀᴄᴋ ᴘᴀᴜsᴇᴅ" }
-	mode := "ᴀᴜᴅɪᴏ"
-	if t.video { mode = "ᴠɪᴅᴇᴏ" }
+	state := "NOW PLAYING"
+	if paused { state = "PAUSED" }
+	mode := "Audio"
+	if t.video { mode = "Video" }
 	durationText := "Live / unknown"
 	if t.duration > 0 {
 		seconds := int(t.duration)
 		durationText = fmt.Sprintf("%02d:%02d", seconds/60, seconds%60)
 	}
-	caption := fmt.Sprintf("♫ <b>%s</b>\n\n%s · %s\n", html.EscapeString(t.title), state, mode)
-	if t.uploader != "" { caption += "◈ <b>ᴀʀᴛɪsᴛ/ᴄʜᴀɴɴᴇʟ:</b> " + html.EscapeString(t.uploader) + "\n" }
-	caption += "◈ <b>ᴅᴜʀᴀᴛɪᴏɴ:</b> " + durationText + "\n"
-	if t.url != "" { caption += "◈ <a href=\"" + html.EscapeString(t.url) + "\">ᴏᴘᴇɴ sᴏᴜʀᴄᴇ</a>\n" }
-	caption += "\n<blockquote>ғᴏʀ ᴍᴜsɪᴄ, ᴍᴏᴏᴅ ᴀɴᴅ ʟᴀᴛᴇ ɴɪɢʜᴛs.</blockquote>\n— <b>" + html.EscapeString(name) + "</b>"
+	caption := fmt.Sprintf("<b>FRIDAY MUSIC</b>\n\n<b>%s</b>\n%s · %s\n", html.EscapeString(t.title), state, mode)
+	if t.uploader != "" { caption += "Channel: " + html.EscapeString(t.uploader) + "\n" }
+	caption += "Duration: " + durationText + "\n"
+	if t.requestedBy != "" {
+		if t.requestedByID != 0 {
+			caption += "Requested by: <a href=\"tg://user?id=" + fmt.Sprint(t.requestedByID) + "\">" + html.EscapeString(t.requestedBy) + "</a>\n"
+		} else {
+			caption += "Requested by: " + html.EscapeString(t.requestedBy) + "\n"
+		}
+	}
+	if t.url != "" { caption += "<a href=\"" + html.EscapeString(t.url) + "\">Open source</a>\n" }
+	caption += "\n— <b>" + html.EscapeString(name) + "</b>"
 	return caption
 }
 
@@ -172,7 +179,7 @@ func (b *bot) handleUICallback(cb *telegram.CallbackQuery) error {
 	s := b.mgr.get(chatID)
 	switch strings.TrimPrefix(data, "friday:") {
 	case "home":
-		_, err := cb.Edit("𝐻𝑖𝑒𝑒... ᴡᴇʟᴄᴏᴍᴇ ᴛᴏ <b>FRIDAY</b>\n\n» ᴠᴏɪᴄᴇ-ᴄʜᴀᴛ ᴍᴜsɪᴄ, ǫᴜᴇᴜᴇ ᴍᴀɴᴀɢᴇᴍᴇɴᴛ ᴀɴᴅ ᴘʟᴀʏʙᴀᴄᴋ ᴄᴏɴᴛʀᴏʟs.\n» ᴜsᴇ /help ғᴏʀ ᴄᴏᴍᴍᴀɴᴅs.", &telegram.SendOptions{ParseMode: "html", ReplyMarkup: b.startKeyboard()})
+		_, err := cb.Edit("<b>FRIDAY MUSIC</b>\n\nA Telegram voice-chat music bot.\nPlay tracks, manage the queue, and control playback from one panel.\n\nUse /help to see available commands.", &telegram.SendOptions{ParseMode: "html", ReplyMarkup: b.startKeyboard()})
 		_, _ = cb.Answer("Home")
 		return err
 	case "help":

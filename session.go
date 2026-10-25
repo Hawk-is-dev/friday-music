@@ -23,6 +23,8 @@ type track struct {
 	uploader string
 	duration float64
 	requested string
+	requestedBy string
+	requestedByID int64
 }
 
 type session struct {
