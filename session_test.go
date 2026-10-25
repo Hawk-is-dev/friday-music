@@ -187,3 +187,19 @@ func TestClearQueueReturnsTracksAndEmptiesQueue(t *testing.T) {
 		t.Fatalf("queue not empty after clearQueue: %#v", s.queue)
 	}
 }
+
+func TestRepeatModesAreMutuallyExclusive(t *testing.T) {
+	s := &session{}
+	if !s.toggleLoop() {
+		t.Fatal("expected current-track repeat to enable")
+	}
+	if !s.toggleLoopQueue() {
+		t.Fatal("expected queue repeat to enable")
+	}
+	if s.loopEnabled() {
+		t.Fatal("queue repeat should disable current-track repeat")
+	}
+	if !s.loopQueueEnabled() {
+		t.Fatal("queue repeat should remain enabled")
+	}
+}
