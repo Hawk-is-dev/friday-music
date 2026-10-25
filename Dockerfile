@@ -3,7 +3,9 @@ WORKDIR /src
 COPY go.mod ./
 RUN go mod download
 COPY . .
-RUN CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o /out/friday .
+# The repository currently has no go.sum. Generate and verify dependency checksums
+# after source files are present, before compiling.
+RUN go mod tidy && go mod verify && CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags="-s -w" -o /out/friday .
 
 FROM denoland/deno:bin-2.9.8 AS deno
 
