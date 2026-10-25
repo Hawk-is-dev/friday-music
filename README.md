@@ -11,6 +11,7 @@ A Go-based Telegram group voice-chat music bot focused on per-chat playback sess
 - `/stop`, `/end`, `/leave`
 - `/queue`, `/shuffle`, `/playing`, `/volume 0-200`
 - `/loop` — repeat the current track until disabled
+- `/loopqueue` — cycle through the queue continuously
 - `/remove <number>` — remove an upcoming queue item
 - `/clear` — clear upcoming tracks without stopping the current track
 - `/stats`, `/participants`
@@ -48,7 +49,7 @@ A Dockerfile and Railway configuration are included. Set environment variables i
 
 ## Roadmap / not implemented yet
 
-Seeking, lyrics, inline controls, admin checks, automatic reconnect, and production soak testing still need to be added. Repeat-current-track is available with `/loop`, queue shuffle with `/shuffle`, and queue removal/clearing with `/remove` and `/clear`. This repository is an initial working-code foundation, not yet a feature-complete replacement for every existing music bot.
+Seeking, lyrics, inline controls, admin checks, automatic reconnect, and production soak testing still need to be added. Repeat-current-track is available with `/loop`, repeat-queue with `/loopqueue`, queue shuffle with `/shuffle`, and queue removal/clearing with `/remove` and `/clear`. This repository is an initial working-code foundation, not yet a feature-complete replacement for every existing music bot.
 
 ## Upstream licenses
 
