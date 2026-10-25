@@ -102,7 +102,7 @@ func downloadExternal(ctx context.Context, dir, query string, video bool) (strin
 	// the first result's ID and title works for both search queries and URLs.
 	metaArgs := []string{"--no-warnings", "--playlist-items", "1"}
 	metaArgs = append(metaArgs, cookieArgs...)
-	metaArgs = append(metaArgs, "--print", "%(id)s", "--print", "%(title)s", target)
+	metaArgs = append(metaArgs, "--print", "%(id)s", "--print", "%(title)s", "--print", "%(duration)s", target)
 	metaCmd := exec.CommandContext(ctx, "yt-dlp", metaArgs...)
 	metaBytes, err := metaCmd.Output()
 	if err != nil {
@@ -111,6 +111,12 @@ func downloadExternal(ctx context.Context, dir, query string, video bool) (strin
 	id, title, err := parseYtDlpMetadata(string(metaBytes))
 	if err != nil {
 		return "", "", err
+	}
+	if duration, ok := parseYtDlpDuration(string(metaBytes)); ok {
+		limit := maxDurationMinutes()
+		if duration > float64(limit*60) {
+			return "", "", fmt.Errorf("track is %.0f minutes long; FRIDAY's limit is %d minutes", duration/60, limit)
+		}
 	}
 	base := filepath.Join(dir, fmt.Sprintf("%s_%d", sanitize(id), time.Now().UnixNano()))
 	args := []string{"--no-warnings", "--playlist-items", "1", "--force-overwrites"}
@@ -138,7 +144,7 @@ func downloadExternal(ctx context.Context, dir, query string, video bool) (strin
 }
 
 func parseYtDlpMetadata(output string) (string, string, error) {
-	lines := strings.SplitN(strings.TrimSpace(output), "\n", 2)
+	lines := strings.SplitN(strings.TrimSpace(output), "\n", 3)
 	if len(lines) == 0 || strings.TrimSpace(lines[0]) == "" {
 		return "", "", fmt.Errorf("source returned no media ID")
 	}
@@ -148,6 +154,23 @@ func parseYtDlpMetadata(output string) (string, string, error) {
 		title = strings.TrimSpace(lines[1])
 	}
 	return id, title, nil
+}
+
+func parseYtDlpDuration(output string) (float64, bool) {
+	lines := strings.SplitN(strings.TrimSpace(output), "\n", 3)
+	if len(lines) < 3 || strings.TrimSpace(lines[2]) == "" || strings.EqualFold(strings.TrimSpace(lines[2]), "NA") {
+		return 0, false
+	}
+	seconds, err := strconv.ParseFloat(strings.TrimSpace(lines[2]), 64)
+	return seconds, err == nil && seconds >= 0
+}
+
+func maxDurationMinutes() int {
+	limit, err := strconv.Atoi(strings.TrimSpace(os.Getenv("MAX_DURATION_MINUTES")))
+	if err != nil || limit < 1 || limit > 240 {
+		return 30
+	}
+	return limit
 }
 
 func prepareYtDlpCookies(dir string) (string, func(), error) {
