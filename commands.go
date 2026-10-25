@@ -134,76 +134,154 @@ func (b *bot) handlePlay(video, vp9 bool) telegram.MessageHandler {
 
 func downloadExternal(ctx context.Context, dir, query string, video bool) (track, error) {
 	query = strings.TrimSpace(query)
-	if query == "" { return track{}, fmt.Errorf("enter a song name or URL") }
+	if query == "" {
+		return track{}, fmt.Errorf("enter a song name or URL")
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return track{}, fmt.Errorf("create download directory: %w", err)
+	}
 	cookiePath, cleanupCookies, err := prepareYtDlpCookies(dir)
-	if err != nil { return track{}, fmt.Errorf("prepare yt-dlp cookies: %w", err) }
+	if err != nil {
+		return track{}, fmt.Errorf("prepare yt-dlp cookies: %w", err)
+	}
 	defer cleanupCookies()
 	cookieArgs := []string{}
-	if cookiePath != "" { cookieArgs = append(cookieArgs, "--cookies", cookiePath) }
+	if cookiePath != "" {
+		cookieArgs = append(cookieArgs, "--cookies", cookiePath)
+	}
 
 	target := query
+	isURL := false
 	if parsed, parseErr := url.ParseRequestURI(query); parseErr == nil && parsed.Scheme != "" {
 		if parsed.Scheme != "https" && parsed.Scheme != "http" {
 			return track{}, fmt.Errorf("only http/https URLs are supported")
 		}
+		isURL = true
 	} else {
 		target = "ytsearch1:" + query
 	}
 
-	// Resolve a search once, then download the exact result URL instead of
-	// asking YouTube to perform the same search a second time.
-	metaArgs := []string{
-		"--no-warnings", "--no-playlist", "--skip-download",
-		"--js-runtimes", "deno",
-		"--print", "%(id)s\t%(title)s\t%(duration)s\t%(thumbnail)s\t%(uploader)s\t%(webpage_url)s",
+	// Retry metadata extraction with a second YouTube client strategy. This helps
+	// with transient extractor changes; it cannot bypass private/blocked media.
+	extractorVariants := [][]string{
+		{},
+		{"--extractor-args", "youtube:player_client=android,web"},
 	}
-	metaArgs = append(metaArgs, cookieArgs...)
-	metaArgs = append(metaArgs, target)
-	metaCmd := exec.CommandContext(ctx, "yt-dlp", metaArgs...)
-	var metaOut, metaErr bytes.Buffer
-	metaCmd.Stdout, metaCmd.Stderr = &metaOut, &metaErr
-	if err := metaCmd.Run(); err != nil {
-		detail := strings.TrimSpace(metaErr.String())
-		if detail == "" { detail = err.Error() }
-		return track{}, fmt.Errorf("yt-dlp metadata lookup: %s", brief(detail, 700))
+	var t track
+	var lastErr string
+	for attempt, extra := range extractorVariants {
+		metaArgs := []string{
+			"--ignore-config", "--no-warnings", "--no-playlist", "--skip-download",
+			"--retries", "3", "--extractor-retries", "3", "--socket-timeout", "25",
+			"--js-runtimes", "deno",
+			"--print", "%(id)s\\t%(title)s\\t%(duration)s\\t%(thumbnail)s\\t%(uploader)s\\t%(webpage_url)s",
+		}
+		metaArgs = append(metaArgs, extra...)
+		metaArgs = append(metaArgs, cookieArgs...)
+		metaArgs = append(metaArgs, target)
+		metaCmd := exec.CommandContext(ctx, "yt-dlp", metaArgs...)
+		var metaOut, metaErr bytes.Buffer
+		metaCmd.Stdout, metaCmd.Stderr = &metaOut, &metaErr
+		if runErr := metaCmd.Run(); runErr == nil {
+			t, err = parseYtDlpInfo(metaOut.String(), query)
+			if err == nil {
+				break
+			}
+			lastErr = err.Error()
+		} else {
+			lastErr = strings.TrimSpace(metaErr.String())
+			if lastErr == "" {
+				lastErr = runErr.Error()
+			}
+		}
+		if attempt == len(extractorVariants)-1 {
+			return track{}, fmt.Errorf("yt-dlp metadata lookup failed after retries: %s", brief(lastErr, 700))
+		}
+		if ctx.Err() != nil {
+			return track{}, ctx.Err()
+		}
 	}
-	t, err := parseYtDlpInfo(metaOut.String(), query)
-	if err != nil { return track{}, err }
+	if t.title == "" || t.url == "" {
+		return track{}, fmt.Errorf("yt-dlp could not resolve a usable track: %s", brief(lastErr, 500))
+	}
 	if t.duration > float64(maxDurationMinutes()*60) {
 		return track{}, fmt.Errorf("track is %.0f minutes long; FRIDAY's limit is %d minutes", t.duration/60, maxDurationMinutes())
 	}
-	if err := os.MkdirAll(dir, 0o755); err != nil { return track{}, err }
 
 	base := filepath.Join(dir, fmt.Sprintf("%s_%d", sanitize(t.id), time.Now().UnixNano()))
-	args := []string{"--no-warnings", "--no-playlist", "--force-overwrites", "--js-runtimes", "deno"}
-	args = append(args, cookieArgs...)
+	common := []string{
+		"--ignore-config", "--no-warnings", "--no-playlist", "--force-overwrites",
+		"--retries", "5", "--fragment-retries", "5", "--extractor-retries", "3",
+		"--socket-timeout", "25", "--js-runtimes", "deno",
+	}
+	// Try normal extraction first, then alternate client/format strategies.
+	// yt-dlp/FFmpeg errors are retained so the user gets a useful failure reason.
+	type downloadAttempt struct {
+		label string
+		args  []string
+	}
+	var attempts []downloadAttempt
 	if video {
-		args = append(args, "-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best", "--merge-output-format", "mp4")
+		attempts = []downloadAttempt{
+			{"mp4-compatible", []string{"-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best", "--merge-output-format", "mp4"}},
+			{"alternate-format", []string{"--extractor-args", "youtube:player_client=android,web", "-f", "bestvideo+bestaudio/best", "--merge-output-format", "mp4"}},
+			{"single-file-fallback", []string{"-f", "best", "--extractor-args", "youtube:player_client=android,web"}},
+		}
 	} else {
-		args = append(args, "-f", "bestaudio/best", "-x", "--audio-format", "mp3", "--audio-quality", "5")
+		attempts = []downloadAttempt{
+			{"best-audio-mp3", []string{"-f", "bestaudio/best", "-x", "--audio-format", "mp3", "--audio-quality", "0"}},
+			{"alternate-client-mp3", []string{"--extractor-args", "youtube:player_client=android,web", "-f", "bestaudio/best", "-x", "--audio-format", "mp3", "--audio-quality", "0"}},
+			{"best-format-fallback", []string{"-f", "best", "-x", "--audio-format", "mp3", "--audio-quality", "0"}},
+		}
 	}
-	args = append(args, "-o", base+".%(ext)s", "--print", "after_move:filepath", t.url)
-	cmd := exec.CommandContext(ctx, "yt-dlp", args...)
-	var out, stderr bytes.Buffer
-	cmd.Stdout, cmd.Stderr = &out, &stderr
-	if err := cmd.Run(); err != nil {
-		for _, partial := range mustGlob(base + ".*") { removeFile(partial) }
-		detail := strings.TrimSpace(stderr.String())
-		if detail == "" { detail = strings.TrimSpace(out.String()) }
-		if detail == "" { detail = err.Error() }
-		return track{}, fmt.Errorf("yt-dlp download: %s", brief(detail, 700))
+	var downloadErr string
+	for i, attempt := range attempts {
+		args := append([]string{}, common...)
+		args = append(args, attempt.args...)
+		args = append(args, cookieArgs...)
+		args = append(args, "-o", base+".%(ext)s", "--print", "after_move:filepath", t.url)
+		cmd := exec.CommandContext(ctx, "yt-dlp", args...)
+		var out, stderr bytes.Buffer
+		cmd.Stdout, cmd.Stderr = &out, &stderr
+		if runErr := cmd.Run(); runErr == nil {
+			lines := strings.Split(strings.TrimSpace(out.String()), "\\n")
+			if len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) != "" {
+				candidate := strings.TrimSpace(lines[len(lines)-1])
+				info, statErr := os.Stat(candidate)
+				if statErr == nil && info.Size() > 0 {
+					t.path = candidate
+					t.requested = query
+					t.video = video
+					return t, nil
+				}
+				downloadErr = "yt-dlp returned a path but the file is missing or empty"
+			} else {
+				downloadErr = "yt-dlp completed without returning the output file path"
+			}
+		} else {
+			downloadErr = strings.TrimSpace(stderr.String())
+			if downloadErr == "" {
+				downloadErr = strings.TrimSpace(out.String())
+			}
+			if downloadErr == "" {
+				downloadErr = runErr.Error()
+			}
+		}
+		for _, partial := range mustGlob(base + ".*") {
+			removeFile(partial)
+		}
+		if ctx.Err() != nil {
+			return track{}, ctx.Err()
+		}
+		if i < len(attempts)-1 {
+			continue
+		}
 	}
-	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
-	if len(lines) == 0 || strings.TrimSpace(lines[len(lines)-1]) == "" {
-		return track{}, fmt.Errorf("yt-dlp finished without returning the output file path")
+	sourceType := "search"
+	if isURL {
+		sourceType = "URL"
 	}
-	t.path = strings.TrimSpace(lines[len(lines)-1])
-	t.requested = query
-	t.video = video
-	if _, err := os.Stat(t.path); err != nil {
-		return track{}, fmt.Errorf("downloaded file not found: %w", err)
-	}
-	return t, nil
+	return track{}, fmt.Errorf("all %d download strategies failed for this %s: %s", len(attempts), sourceType, brief(downloadErr, 700))
 }
 
 func parseYtDlpInfo(output, requested string) (track, error) {

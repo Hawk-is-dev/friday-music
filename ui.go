@@ -11,16 +11,24 @@ import (
 	"github.com/amarnathcjd/gortc"
 )
 
+func supportLink(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" { return "" }
+	if strings.HasPrefix(value, "@") { return "https://t.me/" + strings.TrimPrefix(value, "@") }
+	if !strings.Contains(value, "://") { return "https://t.me/" + strings.TrimPrefix(value, "@") }
+	return value
+}
+
 func (b *bot) startKeyboard() telegram.ReplyMarkup {
 	kb := telegram.NewKeyboard()
 	if b.botUsername != "" {
 		kb.AddRow(telegram.Button.URL("Add to group", "https://t.me/"+b.botUsername+"?startgroup=true"))
 	}
 	kb.AddRow(telegram.Button.Data("Music commands", "friday:help"))
-	if support := strings.TrimSpace(os.Getenv("SUPPORT_CHANNEL")); support != "" {
+	if support := supportLink(os.Getenv("SUPPORT_CHANNEL")); support != "" {
 		kb.AddRow(telegram.Button.URL("Updates", support))
 	}
-	if support := strings.TrimSpace(os.Getenv("SUPPORT_CHAT")); support != "" {
+	if support := supportLink(os.Getenv("SUPPORT_CHAT")); support != "" {
 		kb.AddRow(telegram.Button.URL("Support", support))
 	}
 	return kb.Build()
