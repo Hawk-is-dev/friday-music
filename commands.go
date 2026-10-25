@@ -337,10 +337,22 @@ func maxDurationMinutes() int {
 }
 
 func prepareYtDlpCookies(dir string) (string, func(), error) {
+	// Prefer raw cookie text so Railway users do not need to Base64-encode it.
+	// This also lets COOKIES_TEXT take precedence over a stale COOKIES_PATH value.
+	if raw := strings.TrimSpace(os.Getenv("COOKIES_TEXT")); raw != "" {
+		return writeTemporaryCookies(dir, []byte(raw))
+	}
 	if path := strings.TrimSpace(os.Getenv("COOKIES_PATH")); path != "" {
-		if _, err := os.Stat(path); err != nil {
+		if info, err := os.Stat(path); err != nil {
+			return "", func() {}, fmt.Errorf("COOKIES_PATH is not readable: %w", err)
+		} else if !info.Mode().IsRegular() {
+			return "", func() {}, fmt.Errorf("COOKIES_PATH must point to a regular file")
+		}
+		file, err := os.Open(path)
+		if err != nil {
 			return "", func() {}, fmt.Errorf("COOKIES_PATH is not readable: %w", err)
 		}
+		_ = file.Close()
 		return path, func() {}, nil
 	}
 	encoded := strings.TrimSpace(os.Getenv("COOKIES_B64"))
@@ -354,6 +366,16 @@ func prepareYtDlpCookies(dir string) (string, func(), error) {
 	if err != nil {
 		return "", func() {}, fmt.Errorf("COOKIES_B64 must be standard base64: %w", err)
 	}
+	return writeTemporaryCookies(dir, data)
+}
+
+func writeTemporaryCookies(dir string, data []byte) (string, func(), error) {
+	if len(bytes.TrimSpace(data)) == 0 {
+		return "", func() {}, fmt.Errorf("cookie content is empty")
+	}
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", func() {}, fmt.Errorf("create cookie directory: %w", err)
+	}
 	file, err := os.CreateTemp(dir, "friday-cookies-*.txt")
 	if err != nil {
 		return "", func() {}, err
@@ -364,6 +386,13 @@ func prepareYtDlpCookies(dir string) (string, func(), error) {
 		_ = file.Close()
 		cleanup()
 		return "", func() {}, err
+	}
+	if len(data) > 0 && data[len(data)-1] != '\n' {
+		if _, err := file.Write([]byte("\n")); err != nil {
+			_ = file.Close()
+			cleanup()
+			return "", func() {}, err
+		}
 	}
 	if err := file.Close(); err != nil {
 		cleanup()
