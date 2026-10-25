@@ -188,7 +188,7 @@ func prepareYtDlpCookies(dir string) (string, func(), error) {
 
 func (b *bot) register() {
 	b.client.OnCommand("start", func(m *telegram.NewMessage) error { return reply2(m, "✦ FRIDAY MUSIC\nYour voice-chat soundtrack is ready.\n\nType /help to explore commands.") })
-	b.client.OnCommand("help", func(m *telegram.NewMessage) error { return reply2(m, "✦ FRIDAY MUSIC · COMMANDS\n━━━━━━━━━━━━━━\n♫ PLAYBACK\n├ /play <song or URL> — play music\n├ /vplay — play replied video\n├ /vp9play — video with VP9\n├ /playing — current track\n├ /queue — upcoming tracks\n├ /loop — repeat current track\n├ /remove <number> — remove queued track\n└ /clear — clear upcoming tracks\n\n◈ CONTROLS\n├ /pause · /resume · /skip\n├ /stop — stop and clear queue\n├ /leave — leave voice chat\n├ /shuffle — mix the queue\n└ /volume <0-200> — volume\n\n⌁ INFO\n├ /stats — stream status\n└ /participants — voice chat members\n━━━━━━━━━━━━━━\nMade for late-night listening.") })
+	b.client.OnCommand("help", func(m *telegram.NewMessage) error { return reply2(m, "✦ FRIDAY MUSIC · COMMANDS\n━━━━━━━━━━━━━━\n♫ PLAYBACK\n├ /play <song or URL> — play music\n├ /vplay — play replied video\n├ /vp9play — video with VP9\n├ /playing — current track\n├ /queue — upcoming tracks\n├ /loop — repeat current track\n├ /loopqueue — repeat the queue\n├ /remove <number> — remove queued track\n└ /clear — clear upcoming tracks\n\n◈ CONTROLS\n├ /pause · /resume · /skip\n├ /stop — stop and clear queue\n├ /leave — leave voice chat\n├ /shuffle — mix the queue\n└ /volume <0-200> — volume\n\n⌁ INFO\n├ /stats — stream status\n└ /participants — voice chat members\n━━━━━━━━━━━━━━\nMade for late-night listening.") })
 	b.client.OnCommand("play", b.handlePlay(false, false))
 	b.client.OnCommand("vplay", b.handlePlay(true, false))
 	b.client.OnCommand("vp9play", b.handlePlay(true, true))
@@ -201,6 +201,7 @@ func (b *bot) register() {
 	b.client.OnCommand("volume", b.handleVolume)
 	b.client.OnCommand("queue", b.handleQueue)
 	b.client.OnCommand("loop", b.handleLoop)
+	b.client.OnCommand("loopqueue", b.handleLoopQueue)
 	b.client.OnCommand("remove", b.handleRemove)
 	b.client.OnCommand("clear", b.handleClear)
 	b.client.OnCommand("shuffle", b.handleShuffle)
@@ -257,6 +258,14 @@ func (b *bot) handleLoop(m *telegram.NewMessage) error {
 		return reply2(m, "↻ REPEAT ENABLED\\n╰─ The current track will repeat until /loop is used again.")
 	}
 	return reply2(m, "↻ REPEAT DISABLED")
+}
+
+func (b *bot) handleLoopQueue(m *telegram.NewMessage) error {
+	enabled := b.mgr.get(m.ChatID()).toggleLoopQueue()
+	if enabled {
+		return reply2(m, "↻ QUEUE REPEAT ENABLED\\n╰─ Tracks will cycle in queue order.")
+	}
+	return reply2(m, "↻ QUEUE REPEAT DISABLED")
 }
 
 func (b *bot) handleClear(m *telegram.NewMessage) error {
