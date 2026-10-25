@@ -234,8 +234,13 @@ func (b *bot) handleWelcome(m *telegram.NewMessage) error {
 func (b *bot) handleUICallback(cb *telegram.CallbackQuery) error {
 	data := strings.TrimSpace(cb.DataString())
 	chatID := cb.GetChatID()
+	action := strings.TrimPrefix(data, "friday:")
+	switch action {
+	case "pause", "resume", "skip", "loop", "stop", "shuffle", "mute", "unmute":
+		if !b.allowCallbackControl(cb) { return nil }
+	}
 	s := b.mgr.get(chatID)
-	switch strings.TrimPrefix(data, "friday:") {
+	switch action {
 	case "home":
 		name := strings.TrimSpace(os.Getenv("BOT_NAME"))
 		if name == "" { name = "FRIDAY" }
@@ -289,12 +294,14 @@ func (b *bot) handleUICallback(cb *telegram.CallbackQuery) error {
 }
 
 func (b *bot) handleMute(m *telegram.NewMessage) error {
+	if err := b.requireControl(m); err != nil { return err }
 	if err := b.mgr.get(m.ChatID()).setMuted(true); err != nil { return reply2(m, "◈ MUTE ERROR\n└ "+err.Error()) }
 	b.refreshNowPlaying(m.ChatID())
 	return reply2(m, "🔇 MUTED")
 }
 
 func (b *bot) handleUnmute(m *telegram.NewMessage) error {
+	if err := b.requireControl(m); err != nil { return err }
 	if err := b.mgr.get(m.ChatID()).setMuted(false); err != nil { return reply2(m, "◈ UNMUTE ERROR\n└ "+err.Error()) }
 	b.refreshNowPlaying(m.ChatID())
 	return reply2(m, "🔊 UNMUTED")

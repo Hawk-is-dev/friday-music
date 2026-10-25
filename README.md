@@ -9,7 +9,7 @@ FRIDAY is a Go-based Telegram voice-chat music bot built with Gogram and Gortc. 
 - /pause, /resume, /skip, /stop, /end, /leave
 - /queue, /playing, /shuffle, /volume 0-200
 - /loop, /loopqueue, /remove <number>, /clear
-- /mute, /unmute
+- /mute, /unmute (playback controls are group-admin-only; the configured owner can also control playback)
 - /stats, /participants
 - /start, /help
 - /gensession — owner-only assistant-session setup in private chat
@@ -32,7 +32,7 @@ Optional:
 - LOG_LEVEL — defaults to info
 - DURATION_LIMIT — track duration limit in minutes, defaults to 30, accepted range 1–240. The older MAX_DURATION_MINUTES name remains supported as a fallback.
 
-The owner ID used by /gensession is configured in code, so you do not need an OWNER_ID variable. Sanya also defines MONGO_DB_URI, REDIS_URL, REDIS_TOKEN, LOGGER_ID, POST_CHANNEL_ID, GROQ_API_KEY, GROQ_MODEL, API_KEY, API_URL, VERCEL_SEARCH_URL, LASTFM_API_KEY, and STRING_SESSION2 through STRING_SESSION7. FRIDAY does not currently use these: database persistence, AI tools, logging-channel features, and multiple assistant accounts have not been ported, so adding those variables alone will not enable them.
+Playback controls are restricted to group admins, with the configured owner allowed as an override. FRIDAY checks admin status through Telegram before executing those commands. The owner ID used by /gensession is configured in code, so you do not need an OWNER_ID variable. Sanya also defines MONGO_DB_URI, REDIS_URL, REDIS_TOKEN, LOGGER_ID, POST_CHANNEL_ID, GROQ_API_KEY, GROQ_MODEL, API_KEY, API_URL, VERCEL_SEARCH_URL, LASTFM_API_KEY, and STRING_SESSION2 through STRING_SESSION7. FRIDAY does not currently use these: database persistence, AI tools, logging-channel features, and multiple assistant accounts have not been ported, so adding those variables alone will not enable them.
 
 ## Setup
 

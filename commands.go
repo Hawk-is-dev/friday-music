@@ -32,6 +32,33 @@ type bot struct {
 	sessionFlow *sessionFlow
 }
 
+func (b *bot) controlPermission(chatID, userID int64, private bool) (bool, string) {
+	if private || userID == configuredOwnerID {
+		return true, ""
+	}
+	member, err := b.client.GetChatMember(chatID, userID)
+	if err != nil {
+		return false, "Could not verify admin permissions. Make sure FRIDAY is an admin in this group."
+	}
+	if member.Status == telegram.Admin || member.Status == telegram.Creator {
+		return true, ""
+	}
+	return false, "Only group admins can control playback."
+}
+
+func (b *bot) requireControl(m *telegram.NewMessage) error {
+	allowed, reason := b.controlPermission(m.ChatID(), m.SenderID(), m.IsPrivate())
+	if allowed { return nil }
+	return reply2(m, "⛔ " + reason)
+}
+
+func (b *bot) allowCallbackControl(cb *telegram.CallbackQuery) bool {
+	allowed, reason := b.controlPermission(cb.GetChatID(), cb.GetSenderID(), cb.IsPrivate())
+	if allowed { return true }
+	_, _ = cb.Answer(reason)
+	return false
+}
+
 func (b *bot) callFactory(vp9 bool) *gortc.Call {
 	opts := []gortc.Option{b.logLevel}
 	if vp9 { opts = append(opts, gortc.WithVideoCodec(gortc.MimeTypeVP9)) }
@@ -299,20 +326,24 @@ func (b *bot) register() {
 	b.client.OnCommand("participants", b.handleParticipants)
 }
 func (b *bot) handleSkip(m *telegram.NewMessage) error {
+	if err := b.requireControl(m); err != nil { return err }
 	if !b.mgr.get(m.ChatID()).skip() { return reply2(m, "♫ NOTHING PLAYING\n╰─ Queue a track with /play.") }
 	return reply2(m, "⏭ TRACK SKIPPED")
 }
 func (b *bot) handlePause(m *telegram.NewMessage) error {
+	if err := b.requireControl(m); err != nil { return err }
 	if !b.mgr.get(m.ChatID()).pause() { return reply2(m, "Ⅱ Nothing is playing to pause.") }
 	b.refreshNowPlaying(m.ChatID())
 	return reply2(m, "Ⅱ PLAYBACK PAUSED")
 }
 func (b *bot) handleResume(m *telegram.NewMessage) error {
+	if err := b.requireControl(m); err != nil { return err }
 	if !b.mgr.get(m.ChatID()).resume() { return reply2(m, "▶ Nothing is paused right now.") }
 	b.refreshNowPlaying(m.ChatID())
 	return reply2(m, "▶ PLAYBACK RESUMED")
 }
 func (b *bot) handleStop(m *telegram.NewMessage) error {
+	if err := b.requireControl(m); err != nil { return err }
 	s := b.mgr.get(m.ChatID())
 	s.stop()
 	err := s.leave()
@@ -322,6 +353,7 @@ func (b *bot) handleStop(m *telegram.NewMessage) error {
 	return reply2(m, "■ PLAYBACK STOPPED\n╰─ Queue cleared.")
 }
 func (b *bot) handleLeave(m *telegram.NewMessage) error {
+	if err := b.requireControl(m); err != nil { return err }
 	s := b.mgr.get(m.ChatID())
 	err := s.leave()
 	b.mgr.dropIfSame(m.ChatID(), s)
@@ -329,6 +361,7 @@ func (b *bot) handleLeave(m *telegram.NewMessage) error {
 	return reply2(m, "↗ LEFT VOICE CHAT")
 }
 func (b *bot) handleVolume(m *telegram.NewMessage) error {
+	if err := b.requireControl(m); err != nil { return err }
 	v, err := strconv.Atoi(strings.TrimSpace(m.Args()))
 	if err != nil || v < 0 || v > 200 { return reply2(m, "◈ Usage: /volume <0-200>") }
 	if err := b.mgr.get(m.ChatID()).setVolume(v); err != nil { return reply2(m, "◈ VOLUME ERROR\n└ "+err.Error()) }
@@ -348,6 +381,7 @@ func (b *bot) handleQueue(m *telegram.NewMessage) error {
 	return reply2(m, out.String())
 }
 func (b *bot) handleLoop(m *telegram.NewMessage) error {
+	if err := b.requireControl(m); err != nil { return err }
 	enabled := b.mgr.get(m.ChatID()).toggleLoop()
 	if enabled {
 		b.refreshNowPlaying(m.ChatID())
@@ -358,6 +392,7 @@ func (b *bot) handleLoop(m *telegram.NewMessage) error {
 }
 
 func (b *bot) handleLoopQueue(m *telegram.NewMessage) error {
+	if err := b.requireControl(m); err != nil { return err }
 	enabled := b.mgr.get(m.ChatID()).toggleLoopQueue()
 	if enabled {
 		return reply2(m, "↻ QUEUE REPEAT ENABLED\n╰─ Tracks will cycle in queue order.")
@@ -366,11 +401,13 @@ func (b *bot) handleLoopQueue(m *telegram.NewMessage) error {
 }
 
 func (b *bot) handleClear(m *telegram.NewMessage) error {
+	if err := b.requireControl(m); err != nil { return err }
 	count := b.mgr.get(m.ChatID()).clearQueue()
 	return reply2(m, fmt.Sprintf("⌫ QUEUE CLEARED\n╰─ Removed %d upcoming track(s).", count))
 }
 
 func (b *bot) handleRemove(m *telegram.NewMessage) error {
+	if err := b.requireControl(m); err != nil { return err }
 	index, err := strconv.Atoi(strings.TrimSpace(m.Args()))
 	if err != nil || index < 1 {
 		return reply2(m, "⌫ Usage: /remove <queue number>")
@@ -461,6 +498,7 @@ func sanitize(name string) string {
 }
 
 func (b *bot) handleShuffle(m *telegram.NewMessage) error {
+	if err := b.requireControl(m); err != nil { return err }
 	count := b.mgr.get(m.ChatID()).shuffle()
 	if count < 2 { return reply2(m, "⤨ Add at least two upcoming tracks to shuffle.") }
 	return reply2(m, fmt.Sprintf("⤨ QUEUE SHUFFLED\n╰─ Mixed %d upcoming tracks.", count))
