@@ -20,6 +20,17 @@ func main() {
 			log.Fatalf("missing required environment variable: %s", key)
 		}
 	}
+
+	// Railway variables can accidentally include surrounding quotes or newlines.
+	// Normalize harmless surrounding whitespace, but never print the secret itself.
+	sessionString := strings.TrimSpace(os.Getenv("SESSION_STRING"))
+	if strings.ContainsAny(sessionString, "\r\n\t ") {
+		log.Fatal("SESSION_STRING contains embedded whitespace; paste the raw, single-line Gogram session string without quotes")
+	}
+	if !strings.HasPrefix(sessionString, "1BvE") && !strings.HasPrefix(sessionString, "1BvX") {
+		log.Fatalf("SESSION_STRING does not look like a Gogram string session (expected prefix 1BvE or legacy 1BvX); regenerate/export it with the same Gogram library version used by FRIDAY")
+	}
+
 	apiID, err := strconv.Atoi(mustEnv("API_ID"))
 	if err != nil || apiID <= 0 {
 		log.Fatalf("invalid API_ID: must be a positive integer")
@@ -38,10 +49,10 @@ func main() {
 
 	assistant, err := telegram.NewClient(telegram.ClientConfig{
 		AppID: int32(apiID), AppHash: apiHash,
-		StringSession: os.Getenv("SESSION_STRING"), Session: "friday-assistant.session",
+		StringSession: sessionString, Session: "friday-assistant.session",
 	})
 	if err != nil {
-		log.Fatalf("create assistant client: %v", err)
+		log.Fatalf("create assistant client: %v; SESSION_STRING passed basic format checks, so export it again with Gogram's ExportStringSession() using the same Gogram version pinned in go.mod. Do not paste the session into logs or chat", err)
 	}
 	if _, err := assistant.Conn(); err != nil {
 		log.Fatalf("connect assistant account: %v", err)
@@ -61,7 +72,9 @@ func main() {
 	}
 
 	downDir := os.Getenv("DOWNLOAD_DIR")
-	if downDir == "" { downDir = "downloads" }
+	if downDir == "" {
+		downDir = "downloads"
+	}
 	if err := os.MkdirAll(downDir, 0o755); err != nil {
 		log.Fatalf("create download directory: %v", err)
 	}
