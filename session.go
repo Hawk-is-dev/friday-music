@@ -252,6 +252,7 @@ func (s *session) toggleLoop() bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.loop = !s.loop
+	if s.loop { s.loopQueue = false }
 	return s.loop
 }
 
