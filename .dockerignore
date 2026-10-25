@@ -1,0 +1,12 @@
+.git
+.github
+.env
+.env.*
+*.session
+*.session-journal
+cookies*.txt
+*.cookies.txt
+downloads/
+logs/
+*.log
+.DS_Store
