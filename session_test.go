@@ -227,3 +227,13 @@ func TestMaxDurationMinutesDefaultsAndValidates(t *testing.T) {
 		t.Fatalf("configured duration = %d, want 45", got)
 	}
 }
+
+func TestVolumeCanBeConfiguredBeforePlayback(t *testing.T) {
+	s := &session{volume: 100}
+	if err := s.setVolume(150); err != nil {
+		t.Fatalf("setVolume before playback returned error: %v", err)
+	}
+	if s.volume != 150 {
+		t.Fatalf("stored volume = %d, want 150", s.volume)
+	}
+}
