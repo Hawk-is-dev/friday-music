@@ -30,11 +30,14 @@ type session struct {
 	gen uint64
 	playing bool
 	closed bool
+	loop bool
 	volume int
 	useVP9 bool
 	lastBwe gortc.BandwidthEstimate
 	joinedAt map[int64]bool
 }
+
+const maxQueuedTracks = 50
 
 type manager struct {
 	mu sync.Mutex
@@ -69,6 +72,9 @@ func (s *session) enqueueTrack(factory clientFactory, chatID any, t track) (int,
 	defer s.mu.Unlock()
 	if s.closed {
 		return 0, false, fmt.Errorf("playback session is closed; retry the command")
+	}
+	if len(s.queue) >= maxQueuedTracks {
+		return 0, false, fmt.Errorf("queue limit reached (%d upcoming tracks)", maxQueuedTracks)
 	}
 	if s.call == nil {
 		call := factory(s.useVP9)
@@ -137,11 +143,19 @@ func (s *session) startNext() {
 	go func() {
 		<-player.Done()
 		cancel()
-		removeFile(next.path)
 		s.mu.Lock()
 		stale := gen != s.gen
+		keepForLoop := !stale && s.loop
+		if keepForLoop {
+			s.queue = append([]track{next}, s.queue...)
+		}
 		s.mu.Unlock()
-		if !stale { s.startNext() }
+		if !keepForLoop {
+			removeFile(next.path)
+		}
+		if !stale {
+			s.startNext()
+		}
 	}()
 }
 
@@ -229,6 +243,42 @@ func (m *manager) shutdownAll() {
 		_ = s.leave()
 		m.dropIfSame(s.chatID, s)
 	}
+}
+
+func (s *session) toggleLoop() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.loop = !s.loop
+	return s.loop
+}
+
+func (s *session) loopEnabled() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.loop
+}
+
+func (s *session) clearQueue() int {
+	s.mu.Lock()
+	queued := s.queue
+	s.queue = nil
+	s.mu.Unlock()
+	for _, t := range queued {
+		removeFile(t.path)
+	}
+	return len(queued)
+}
+
+func (s *session) removeQueued(index int) (track, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if index < 1 || index > len(s.queue) {
+		return track{}, false
+	}
+	idx := index - 1
+	removed := s.queue[idx]
+	s.queue = append(s.queue[:idx], s.queue[idx+1:]...)
+	return removed, true
 }
 
 func (s *session) shuffle() int {
