@@ -97,7 +97,7 @@ func main() {
 		logLevel: gortc.WithLogger(gortc.NewLogger(level)), downDir: downDir,
 		displayMessages: make(map[int64]int32),
 	}
-	b.mgr.onTrack = b.publishNowPlaying
+	b.mgr.onTrack = b.onTrackStarted
 	b.mgr.onEnd = b.markTrackEnded
 	if me, err := botClient.GetMe(); err == nil {
 		b.botID, b.botUsername = me.ID, me.Username

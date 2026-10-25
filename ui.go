@@ -5,8 +5,10 @@ import (
 	"html"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/amarnathcjd/gogram/telegram"
+	"github.com/amarnathcjd/gortc"
 )
 
 func (b *bot) startKeyboard() telegram.ReplyMarkup {
@@ -69,22 +71,73 @@ func (b *bot) handleHelp(m *telegram.NewMessage) error {
 
 func (b *bot) playerKeyboard(chatID int64) telegram.ReplyMarkup {
 	s := b.mgr.get(chatID)
-	_, _, paused := s.snapshot()
+	s.mu.Lock()
+	player := s.player
+	var current *track
+	if s.current != nil {
+		copyTrack := *s.current
+		current = &copyTrack
+	}
+	paused := player != nil && player.Paused()
+	loop := s.loop
+	s.mu.Unlock()
+
+	kb := telegram.NewKeyboard()
+	if player != nil && current != nil {
+		position := player.Position()
+		duration := player.Duration()
+		if duration <= 0 && current.duration > 0 {
+			duration = time.Duration(current.duration * float64(time.Second))
+		}
+		if duration > 0 {
+			if position < 0 { position = 0 }
+			if position > duration { position = duration }
+			filled := int(float64(position) / float64(duration) * 10)
+			if filled < 0 { filled = 0 }
+			if filled > 10 { filled = 10 }
+			bar := strings.Repeat("▰", filled) + strings.Repeat("▱", 10-filled)
+			label := fmt.Sprintf("%s %s %s", formatPlaybackTime(position), bar, formatPlaybackTime(duration))
+			kb.AddRow(telegram.Button.Data(label, "friday:timer"))
+		}
+	}
 	pauseText, pauseData := "Ⅱ ᴘᴀᴜsᴇ", "friday:pause"
 	if paused { pauseText, pauseData = "▷ ʀᴇsᴜᴍᴇ", "friday:resume" }
 	loopText := "↻ ʟᴏᴏᴘ"
-	if s.loopEnabled() { loopText = "↻ ʟᴏᴏᴘ ✓" }
-	return telegram.NewKeyboard().
-		AddRow(
-			telegram.Button.Data(pauseText, pauseData),
-			telegram.Button.Data(loopText, "friday:loop"),
-			telegram.Button.Data("‣‣I sᴋɪᴘ", "friday:skip"),
-			telegram.Button.Data("▢ sᴛᴏᴘ", "friday:stop"),
-		).
-		AddRow(
-			telegram.Button.Data("≡ ǫᴜᴇᴜᴇ", "friday:queue"),
-			telegram.Button.Data("⌯ ʜᴇʟᴘ", "friday:help"),
-		).Build()
+	if loop { loopText = "↻ ʟᴏᴏᴘ ✓" }
+	kb.AddRow(
+		telegram.Button.Data(pauseText, pauseData),
+		telegram.Button.Data(loopText, "friday:loop"),
+		telegram.Button.Data("‣‣I sᴋɪᴘ", "friday:skip"),
+		telegram.Button.Data("▢ sᴛᴏᴘ", "friday:stop"),
+	)
+	kb.AddRow(
+		telegram.Button.Data("≡ ǫᴜᴇᴜᴇ", "friday:queue"),
+		telegram.Button.Data("⌯ ʜᴇʟᴘ", "friday:help"),
+	)
+	return kb.Build()
+}
+
+func formatPlaybackTime(value time.Duration) string {
+	if value < 0 { value = 0 }
+	seconds := int(value.Seconds())
+	return fmt.Sprintf("%02d:%02d", seconds/60, seconds%60)
+}
+
+func (b *bot) onTrackStarted(chatID int64, t track, player *gortc.Player) {
+	b.publishNowPlaying(chatID, t)
+	if player == nil { return }
+	go func() {
+		ticker := time.NewTicker(10 * time.Second)
+		defer ticker.Stop()
+		s := b.mgr.get(chatID)
+		for range ticker.C {
+			s.mu.Lock()
+			active := s.player == player && s.current != nil
+			s.mu.Unlock()
+			if !active { return }
+			b.refreshNowPlaying(chatID)
+		}
+	}()
 }
 
 func (b *bot) trackCaption(t track, paused bool) string {
@@ -188,6 +241,9 @@ func (b *bot) handleUICallback(cb *telegram.CallbackQuery) error {
 		_, err := cb.Edit("✦ <b>FRIDAY · MUSIC COMMANDS</b>\n\n/play &lt;song or URL&gt; · /vplay · /vp9play\n/pause · /resume · /skip · /stop\n/queue · /playing · /shuffle · /volume\n/loop · /loopqueue · /remove · /clear\n/mute · /unmute · /leave\n\nAssistant session setup: /gensession in private chat.", &telegram.SendOptions{ParseMode: "html", ReplyMarkup: telegram.NewKeyboard().AddRow(telegram.Button.Data("⌂ ʜᴏᴍᴇ", "friday:home")).Build()})
 		_, _ = cb.Answer("Music commands")
 		return err
+	case "timer":
+		_, _ = cb.Answer("Playback progress")
+		return nil
 	case "queue":
 		now, has := s.nowPlaying()
 		tracks := s.list()

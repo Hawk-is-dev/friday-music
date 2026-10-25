@@ -53,7 +53,7 @@ const maxQueuedTracks = 50
 type manager struct {
 	mu sync.Mutex
 	sessions map[int64]*session
-	onTrack func(int64, track)
+	onTrack func(int64, track, *gortc.Player)
 	onEnd func(int64)
 }
 
@@ -161,7 +161,7 @@ func (s *session) startNext() {
 		_ = call.SetVolume(volume)
 		_ = call.SetVideoStopped(!next.video)
 	}
-	if notify != nil { go notify(s.chatID, next) }
+	if notify != nil { go notify(s.chatID, next, player) }
 	go func() {
 		<-player.Done()
 		cancel()

@@ -14,7 +14,7 @@ FRIDAY is a Go-based Telegram voice-chat music bot built with Gogram and Gortc. 
 - /start, /help
 - /gensession — owner-only assistant-session setup in private chat
 
-Playback is isolated per group. The now-playing card uses the source thumbnail when available and provides inline pause/resume, repeat, skip, stop, queue, and help controls. The start panel supports an add-to-group button and optional support links.
+Playback is isolated per group. The now-playing card uses the source thumbnail when available, shows requester and track metadata, updates a playback progress bar every 10 seconds, and provides inline pause/resume, repeat, skip, stop, queue, and help controls. The start panel supports an add-to-group button and optional support links.
 
 ## Railway variables
 
