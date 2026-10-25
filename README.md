@@ -26,7 +26,7 @@ Required:
 Optional:
 - BOT_NAME — display name, default FRIDAY
 - START_IMG_URL — welcome image URL (same variable name used by Sanya)
-- SUPPORT_CHANNEL and SUPPORT_CHAT — links shown on the start panel (same variable names used by Sanya)
+- SUPPORT_CHANNEL and SUPPORT_CHAT — links shown on the start panel; accepts @username or a full URL. Defaults: @eternalsportal and @genzportals
 - COOKIES_B64 or COOKIES_PATH — optional YouTube cookies, if required
 - DOWNLOAD_DIR — defaults to downloads
 - LOG_LEVEL — defaults to info
