@@ -57,6 +57,27 @@ func TestShuffleLeavesShortQueueUnchanged(t *testing.T) {
 	}
 }
 
+func TestParseYtDlpInfo(t *testing.T) {
+	output := "abc123\tA Sample Track\t185.5\thttps://img.example/cover.jpg\tSample Artist\thttps://www.youtube.com/watch?v=abc123\n"
+	got, err := parseYtDlpInfo(output, "sample track")
+	if err != nil { t.Fatal(err) }
+	if got.id != "abc123" || got.title != "A Sample Track" || got.duration != 185.5 {
+		t.Fatalf("metadata identity = (%q, %q, %v)", got.id, got.title, got.duration)
+	}
+	if got.thumbnail != "https://img.example/cover.jpg" || got.uploader != "Sample Artist" {
+		t.Fatalf("metadata artwork/uploader = (%q, %q)", got.thumbnail, got.uploader)
+	}
+	if got.url != "https://www.youtube.com/watch?v=abc123" || got.requested != "sample track" {
+		t.Fatalf("metadata URL/query = (%q, %q)", got.url, got.requested)
+	}
+}
+
+func TestParseYtDlpInfoRejectsIncompleteOutput(t *testing.T) {
+	if _, err := parseYtDlpInfo("only-title\n", "query"); err == nil {
+		t.Fatal("expected incomplete yt-dlp metadata to fail")
+	}
+}
+
 func TestParseYtDlpMetadata(t *testing.T) {
 	id, title, err := parseYtDlpMetadata("abc123\n  A Sample Track  \n")
 	if err != nil {

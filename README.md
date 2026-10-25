@@ -21,7 +21,7 @@ Playback is isolated per group. The now-playing card uses the source thumbnail w
 Required:
 - BOT_TOKEN — token from BotFather
 - API_ID and API_HASH — from my.telegram.org
-- STRING_SESSION — assistant user session for voice-chat playback (same variable name used by Sanya). SESSION_STRING is accepted as a compatibility alias.
+- STRING_SESSION — assistant user session for voice-chat playback (same variable name used by Sanya). SESSION_STRING is accepted as a compatibility alias. Important: the variable name matches Sanya, but Sanya's Pyrogram session string is not compatible with Gogram; generate a FRIDAY/Gogram string using /gensession.
 
 Optional:
 - BOT_NAME — display name, default FRIDAY
@@ -39,7 +39,7 @@ The owner ID used by /gensession is configured in code, so you do not need an OW
 1. Set the required Railway variables.
 2. Start FRIDAY and open its private chat as the configured owner.
 3. Run /gensession, then follow /sessionphone, /sessioncode, and /sessionpassword prompts if two-step verification is enabled.
-4. Copy the generated value to STRING_SESSION and restart the service.
+4. Copy the generated Gogram value to STRING_SESSION and restart the service. Do not paste a session exported by Sanya/Pyrogram; the libraries use different session formats.
 5. Add the bot to a group, make it an admin with permission to invite users, and start a voice chat before playing music.
 
 ## Media extraction

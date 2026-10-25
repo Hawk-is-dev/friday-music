@@ -22,8 +22,8 @@ func main() {
 		}
 	}
 
-	// SESSION_STRING is optional during first startup so the owner can generate it
-	// through /gensession. Never print the value itself.
+	// STRING_SESSION is optional during first startup so the owner can generate a
+	// Gogram-compatible session through /gensession. Never print the value itself.
 	sessionString := strings.TrimSpace(os.Getenv("STRING_SESSION"))
 	if sessionString == "" {
 		sessionString = strings.TrimSpace(os.Getenv("SESSION_STRING"))

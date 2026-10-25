@@ -179,7 +179,9 @@ func (b *bot) handleUICallback(cb *telegram.CallbackQuery) error {
 	s := b.mgr.get(chatID)
 	switch strings.TrimPrefix(data, "friday:") {
 	case "home":
-		_, err := cb.Edit(fmt.Sprintf("<b>%s MUSIC</b>\n\nA Telegram voice-chat music bot.\nPlay tracks, manage the queue, and control playback from one panel.\n\nUse /help to see available commands.", html.EscapeString(strings.TrimSpace(os.Getenv("BOT_NAME")))), &telegram.SendOptions{ParseMode: "html", ReplyMarkup: b.startKeyboard()})
+		name := strings.TrimSpace(os.Getenv("BOT_NAME"))
+		if name == "" { name = "FRIDAY" }
+		_, err := cb.Edit(fmt.Sprintf("<b>%s MUSIC</b>\n\nA Telegram voice-chat music bot.\nPlay tracks, manage the queue, and control playback from one panel.\n\nUse /help to see available commands.", html.EscapeString(name)), &telegram.SendOptions{ParseMode: "html", ReplyMarkup: b.startKeyboard()})
 		_, _ = cb.Answer("Home")
 		return err
 	case "help":
