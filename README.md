@@ -27,7 +27,7 @@ Optional:
 - BOT_NAME — display name, default FRIDAY
 - START_IMG_URL — welcome image URL (same variable name used by Sanya)
 - SUPPORT_CHANNEL and SUPPORT_CHAT — links shown on the start panel; accepts @username or a full URL. Defaults: @eternalsportal and @genzportals
-- COOKIES_B64 or COOKIES_PATH — optional YouTube cookies, if required
+- COOKIES_TEXT — optional raw multiline Netscape cookies.txt contents; preferred because no Base64 conversion or repository file is needed. COOKIES_B64 and COOKIES_PATH remain supported as alternatives.
 - DOWNLOAD_DIR — defaults to downloads
 - LOG_LEVEL — defaults to info
 - DURATION_LIMIT — track duration limit in minutes, defaults to 30, accepted range 1–240. The older MAX_DURATION_MINUTES name remains supported as a fallback.
