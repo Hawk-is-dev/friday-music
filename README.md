@@ -1,59 +1,55 @@
 # FRIDAY Music
 
-A Go-based Telegram group voice-chat music bot focused on per-chat playback sessions and a lightweight streaming stack.
+FRIDAY is a Go-based Telegram voice-chat music bot built with Gogram and Gortc. It uses FFmpeg, yt-dlp, and Deno for media extraction and audio processing.
 
-## Commands currently implemented
+## Music features
 
-- `/start`, `/help`
-- `/play <YouTube URL or search query>` — search/download audio via yt-dlp; can also reply to Telegram media
-- `/vplay`, `/vp9play` — reply to a Telegram video
-- `/pause`, `/resume`, `/skip`
-- `/stop`, `/end`, `/leave`
-- `/queue`, `/shuffle`, `/playing`, `/volume 0-200`
-- `/loop` — repeat the current track until disabled
-- `/loopqueue` — cycle through the queue continuously
-- `/remove <number>` — remove an upcoming queue item
-- `/clear` — clear upcoming tracks without stopping the current track
-- `/stats`, `/participants`
-- `/gensession` — owner-only assistant-session setup in private chat
+- /play <song name or URL> — play audio; can also reply to Telegram audio/media
+- /vplay <URL or reply> and /vp9play <URL or reply> — video playback
+- /pause, /resume, /skip, /stop, /end, /leave
+- /queue, /playing, /shuffle, /volume 0-200
+- /loop, /loopqueue, /remove <number>, /clear
+- /mute, /unmute (playback controls are group-admin-only; the configured owner can also control playback)
+- /stats, /participants
+- /start, /help
+- /gensession — owner-only assistant-session setup in private chat
 
-Each group has its own queue/session, so different groups can run separate playback sessions. The queue accepts up to 50 upcoming tracks per group to prevent unbounded memory/disk usage. External media is limited to 30 minutes by default; set `MAX_DURATION_MINUTES` (1–240) to change this. Unknown-duration sources are allowed but still depend on yt-dlp support. Downloads use unique filenames to avoid collisions when the same song is requested in parallel. `/clear` removes only upcoming tracks; `/stop` clears the queue and leaves the voice chat.
+Playback is isolated per group. The now-playing card uses the source thumbnail when available, shows requester and track metadata, updates a playback progress bar every 10 seconds, and provides inline pause/resume, repeat, skip, stop, queue, and help controls. The start panel supports an add-to-group button and optional support links.
 
-## Requirements
+## Railway variables
 
-- Go 1.25.3+ and `yt-dlp`/`ffmpeg`/Deno (included in the Docker image)
-- Bot token from @BotFather
-- Telegram API ID and API hash from https://my.telegram.org
-- A Telegram user/assistant session to join voice chats
-- A group with an active voice chat
+Required:
+- BOT_TOKEN — token from BotFather
+- API_ID and API_HASH — from my.telegram.org
+- STRING_SESSION — assistant user session for voice-chat playback (same variable name used by Sanya). SESSION_STRING is accepted as a compatibility alias. Important: the variable name matches Sanya, but Sanya's Pyrogram session string is not compatible with Gogram; generate a FRIDAY/Gogram string using /gensession.
 
-The streaming layer uses [gortc](https://github.com/AmarnathCJD/gortc) and [gogram](https://github.com/AmarnathCJD/gogram).
+Optional:
+- BOT_NAME — display name, default FRIDAY
+- START_IMG_URL — welcome image URL (same variable name used by Sanya)
+- SUPPORT_CHANNEL and SUPPORT_CHAT — links shown on the start panel (same variable names used by Sanya)
+- COOKIES_B64 or COOKIES_PATH — optional YouTube cookies, if required
+- DOWNLOAD_DIR — defaults to downloads
+- LOG_LEVEL — defaults to info
+- DURATION_LIMIT — track duration limit in minutes, defaults to 30, accepted range 1–240. The older MAX_DURATION_MINUTES name remains supported as a fallback.
+
+Playback controls are restricted to group admins, with the configured owner allowed as an override. FRIDAY checks admin status through Telegram before executing those commands. The owner ID used by /gensession is configured in code, so you do not need an OWNER_ID variable. Sanya also defines MONGO_DB_URI, REDIS_URL, REDIS_TOKEN, LOGGER_ID, POST_CHANNEL_ID, GROQ_API_KEY, GROQ_MODEL, API_KEY, API_URL, VERCEL_SEARCH_URL, LASTFM_API_KEY, and STRING_SESSION2 through STRING_SESSION7. FRIDAY does not currently use these: database persistence, AI tools, logging-channel features, and multiple assistant accounts have not been ported, so adding those variables alone will not enable them.
 
 ## Setup
 
-1. Copy `.env.example` to `.env`.
-2. Fill in `BOT_TOKEN`, `API_ID`, `API_HASH`, and `OWNER_ID` (your numeric Telegram user ID).
-3. `SESSION_STRING` is optional on first startup. Start FRIDAY, open its private chat as the configured owner, and use `/gensession`. Follow the prompts with `/sessionphone`, `/sessioncode`, and, if needed, `/sessionpassword`.
-4. Copy the generated string into Railway Variables as `SESSION_STRING`, then redeploy. FRIDAY cannot update Railway variables automatically.
-5. Optionally set `COOKIES_B64` (base64-encoded Netscape cookies file) or `COOKIES_PATH` if your source requires YouTube cookies. Keep these secret.
-6. Never commit `.env`, cookies, or any session files.
-7. Run:
+1. Set the required Railway variables.
+2. Start FRIDAY and open its private chat as the configured owner.
+3. Run /gensession, then follow /sessionphone, /sessioncode, and /sessionpassword prompts if two-step verification is enabled.
+4. Copy the generated Gogram value to STRING_SESSION and restart the service. Do not paste a session exported by Sanya/Pyrogram; the libraries use different session formats.
+5. Add the bot to a group, make it an admin with permission to invite users, and start a voice chat before playing music.
 
-```sh
-go mod tidy
-go run .
-```
+## Media extraction
 
-Add the bot account to the group and make it an administrator with permission to invite users. Start a group voice chat before using playback commands. When `/play`, `/vplay`, or `/vp9play` is used, FRIDAY tries to create a short-lived, single-use invite link and have the assistant user account join the group automatically. This works for public and private supergroups when Telegram permits the bot to create invite links; it is not guaranteed if the bot lacks admin/invite permission, join approval is required, or Telegram restricts the assistant account. The assistant then attempts to join the active voice chat. The `/play` command supports YouTube search queries and HTTP(S) URLs through `yt-dlp`, as well as replies to Telegram media. `/vplay` currently plays replied video media; video URL support is basic and depends on the source format.
+The Docker image installs FFmpeg, Deno, and yt-dlp[default], which includes yt-dlp's JavaScript challenge-solver package. For YouTube searches, FRIDAY resolves metadata once and downloads the resolved webpage URL instead of repeating the search. Error responses include yt-dlp's stderr to make the actual extraction failure easier to diagnose.
 
-## Deployment
+## Known limitations
 
-A Dockerfile and Railway configuration are included. Set environment variables in the hosting dashboard, and ensure the deployment supports Go 1.25.3+, persistent storage for downloads, and outbound Telegram connectivity. Set `OWNER_ID` to your numeric Telegram user ID. `SESSION_STRING` may be omitted for first startup: FRIDAY stays online in setup mode and lets the owner generate a Gogram session with `/gensession`. Copy the generated value into Railway Variables as `SESSION_STRING` and redeploy. Optional `COOKIES_B64` or `COOKIES_PATH` can supply yt-dlp cookies; do not commit either value. Session strings are account credentials; keep them private and delete the bot message after copying.
+This is not a complete port of every Sanya Python command. Lyrics, playlists, database persistence, channel playback, full admin authorization settings, and accurate live progress/seek controls are not implemented yet and are not advertised as working commands.
 
-## Roadmap / not implemented yet
+## Third-party libraries
 
-Seeking, lyrics, inline controls, admin checks, automatic reconnect, and production soak testing still need to be added. Repeat-current-track is available with `/loop`, repeat-queue with `/loopqueue`, queue shuffle with `/shuffle`, and queue removal/clearing with `/remove` and `/clear`. This repository is an initial working-code foundation, not yet a feature-complete replacement for every existing music bot.
-
-## Upstream licenses
-
-FRIDAY uses the open-source [gortc](https://github.com/AmarnathCJD/gortc) and [gogram](https://github.com/AmarnathCJD/gogram) libraries. See their repositories for license and attribution details.
+FRIDAY uses the open-source Gogram and Gortc libraries. Review their licenses and the upstream Sanya Music license before redistributing any derivative implementation.

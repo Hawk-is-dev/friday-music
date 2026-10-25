@@ -175,7 +175,7 @@ func (b *bot) runSessionLogin(chatID int64, phone string, flow *sessionFlow) {
 		return
 	}
 
-	text := fmt.Sprintf("✦ FRIDAY SESSION GENERATED\n\nCopy the full value below into Railway → Variables → SESSION_STRING, then redeploy FRIDAY. This bot cannot edit Railway variables automatically.\n\n%s\n\nThis is a private account credential. Do not forward it or post it in GitHub. After saving it in Railway, delete this message.", sessionString)
+	text := fmt.Sprintf("✦ FRIDAY SESSION GENERATED\n\nCopy the full value below into Railway → Variables → STRING_SESSION, then restart FRIDAY. FRIDAY cannot edit hosting variables automatically.\n\n%s\n\nThis is a private account credential. Do not forward it or post it in GitHub. After saving it in Railway, delete this message.", sessionString)
 	_, _ = b.client.SendMessage(chatID, text)
 }
 

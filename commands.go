@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"fmt"
@@ -23,8 +24,39 @@ type bot struct {
 	mgr *manager
 	logLevel gortc.Option
 	downDir string
+	botUsername string
+	botID int64
+	displayMu sync.Mutex
+	displayMessages map[int64]int32
 	sessionMu sync.Mutex
 	sessionFlow *sessionFlow
+}
+
+func (b *bot) controlPermission(chatID, userID int64, private bool) (bool, string) {
+	if private || userID == configuredOwnerID {
+		return true, ""
+	}
+	member, err := b.client.GetChatMember(chatID, userID)
+	if err != nil {
+		return false, "Could not verify admin permissions. Make sure FRIDAY is an admin in this group."
+	}
+	if member.Status == telegram.Admin || member.Status == telegram.Creator {
+		return true, ""
+	}
+	return false, "Only group admins can control playback."
+}
+
+func (b *bot) requireControl(m *telegram.NewMessage) error {
+	allowed, reason := b.controlPermission(m.ChatID(), m.SenderID(), m.IsPrivate())
+	if allowed { return nil }
+	return reply2(m, "⛔ " + reason)
+}
+
+func (b *bot) allowCallbackControl(cb *telegram.CallbackQuery) bool {
+	allowed, reason := b.controlPermission(cb.GetChatID(), cb.GetSenderID(), cb.IsPrivate())
+	if allowed { return true }
+	_, _ = cb.Answer(reason)
+	return false
 }
 
 func (b *bot) callFactory(vp9 bool) *gortc.Call {
@@ -36,27 +68,41 @@ func (b *bot) callFactory(vp9 bool) *gortc.Call {
 func (b *bot) handlePlay(video, vp9 bool) telegram.MessageHandler {
 	return func(m *telegram.NewMessage) error {
 		if b.assistant == nil {
-			return reply2(m, "✦ ASSISTANT SESSION REQUIRED\n└ Open FRIDAY in private chat and run /gensession. After login, save the generated value as Railway variable SESSION_STRING and redeploy.")
+			return reply2(m, "✦ ASSISTANT SESSION REQUIRED\n└ Open FRIDAY in private chat and run /gensession. Save the generated value as STRING_SESSION (SESSION_STRING is also accepted), then restart the service.")
 		}
-		status, _ := m.Reply("✦ FRIDAY MUSIC\n└ Preparing your track…")
-		var title, path string
+		status, _ := m.Reply("✦ FRIDAY MUSIC\n└ Finding your track…")
+		var t track
 		var err error
 
+		handledReplyMedia := false
 		if m.IsReply() {
-			reply, replyErr := m.GetReplyMessage()
-			if replyErr != nil { return edit(status, "✦ FRIDAY MUSIC\n└ Couldn’t read the replied message.") }
-			if !reply.IsMedia() { return edit(status, "✦ FRIDAY MUSIC\n└ That message has no downloadable media.") }
-			title = mediaTitle(reply)
-			dst := filepath.Join(b.downDir, fmt.Sprintf("%d_%d_%s", m.ChatID(), reply.ID, sanitize(title)))
-			path, err = reply.Download(&telegram.DownloadOptions{FileName:dst})
-		} else if strings.TrimSpace(m.Args()) != "" {
+			replied, replyErr := m.GetReplyMessage()
+			if replyErr != nil {
+				return edit(status, "FRIDAY MUSIC\nCouldn’t read the replied message.")
+			}
+			if isPlayableTelegramMedia(replied) {
+				handledReplyMedia = true
+				t.title = mediaTitle(replied)
+				t.duration = mediaDuration(replied)
+				t.path, err = replied.Download(&telegram.DownloadOptions{
+					FileName: filepath.Join(b.downDir, fmt.Sprintf("%d_%d_%s", m.ChatID(), replied.ID, sanitize(t.title))),
+				})
+			}
+		}
+		if !handledReplyMedia && strings.TrimSpace(m.Args()) != "" {
 			ctx, cancel := context.WithTimeout(context.Background(), 8*time.Minute)
 			defer cancel()
-			title, path, err = downloadExternal(ctx, b.downDir, strings.TrimSpace(m.Args()), video)
-		} else {
-			return edit(status, "✦ HOW TO PLAY\n├ /play <song name or URL>\n├ Reply to audio with /play\n└ Reply to video with /vplay")
+			t, err = downloadExternal(ctx, b.downDir, strings.TrimSpace(m.Args()), video)
+		} else if !handledReplyMedia {
+			return edit(status, "HOW TO PLAY\n/play <song name or URL>\nReply to audio with /play\nReply to video with /vplay")
 		}
-		if err != nil { return edit(status, "✦ DOWNLOAD FAILED\n├ "+brief(err.Error(), 500)+"\n└ Check yt-dlp and ffmpeg setup.") }
+		if err != nil {
+			return edit(status, "✦ DOWNLOAD FAILED\n├ "+brief(err.Error(), 700)+"\n└ Check the yt-dlp extraction details above.")
+		}
+		t.video, t.vp9 = video, vp9
+		t.requestedBy = senderName(m)
+		if m.Sender != nil { t.requestedByID = m.Sender.ID }
+		if t.title == "" { t.title = "Telegram media" }
 
 		s := b.mgr.get(m.ChatID())
 		s.mu.Lock()
@@ -64,115 +110,148 @@ func (b *bot) handlePlay(video, vp9 bool) telegram.MessageHandler {
 		needsAutoJoin := s.call == nil
 		s.mu.Unlock()
 
-		// Only attempt the invite flow when a new voice-chat session is needed.
-		// Adding songs to an existing queue should not create extra invite links.
 		var inviteErr error
 		if needsAutoJoin {
 			inviteErr = b.tryAutoJoinAssistant(m.ChatID())
 		}
-		pos, startNow, enqueueErr := s.enqueueTrack(b.callFactory, m.ChatID(), track{title: title, path: path, video: video, vp9: vp9})
+		pos, startNow, enqueueErr := s.enqueueTrack(b.callFactory, m.ChatID(), t)
 		if enqueueErr != nil {
-			removeFile(path)
-			message := "Could not join voice chat: " + brief(enqueueErr.Error(), 350) + "\nMake sure the group has an active voice chat and the bot is an admin allowed to invite users."
+			removeFile(t.path)
+			message := "Could not join voice chat: " + brief(enqueueErr.Error(), 350) + "\nMake sure the group has an active voice chat and the bot can invite users."
 			if inviteErr != nil {
 				message += "\nAssistant auto-join note: " + brief(inviteErr.Error(), 250)
 			}
 			return edit(status, message)
 		}
-		if startNow { s.startNext(); return edit(status, "♫ NOW PLAYING\n╰─ "+title) }
-		return edit(status, fmt.Sprintf("✦ ADDED TO QUEUE  #%d\n╰─ %s", pos, title))
+		if startNow {
+			s.startNext()
+			if status != nil { _, _ = b.client.DeleteMessages(status.ChannelID(), []int32{status.ID}) }
+			return nil
+		}
+		return edit(status, fmt.Sprintf("♫ ADDED TO QUEUE  #%d\n╰─ %s", pos, t.title))
 	}
 }
 
-func downloadExternal(ctx context.Context, dir, query string, video bool) (string, string, error) {
+func downloadExternal(ctx context.Context, dir, query string, video bool) (track, error) {
+	query = strings.TrimSpace(query)
+	if query == "" { return track{}, fmt.Errorf("enter a song name or URL") }
 	cookiePath, cleanupCookies, err := prepareYtDlpCookies(dir)
-	if err != nil {
-		return "", "", fmt.Errorf("prepare yt-dlp cookies: %w", err)
-	}
+	if err != nil { return track{}, fmt.Errorf("prepare yt-dlp cookies: %w", err) }
 	defer cleanupCookies()
 	cookieArgs := []string{}
-	if cookiePath != "" {
-		cookieArgs = append(cookieArgs, "--cookies", cookiePath)
-	}
+	if cookiePath != "" { cookieArgs = append(cookieArgs, "--cookies", cookiePath) }
 
 	target := query
-	if parsed, err := url.ParseRequestURI(query); err == nil && parsed.Scheme != "" {
+	if parsed, parseErr := url.ParseRequestURI(query); parseErr == nil && parsed.Scheme != "" {
 		if parsed.Scheme != "https" && parsed.Scheme != "http" {
-			return "", "", fmt.Errorf("only http/https URLs are supported")
+			return track{}, fmt.Errorf("only http/https URLs are supported")
 		}
 	} else {
 		target = "ytsearch1:" + query
 	}
 
-	// Search extractors can return playlist-shaped JSON. Asking yt-dlp to print
-	// the first result's ID and title works for both search queries and URLs.
-	metaArgs := []string{"--no-warnings", "--playlist-items", "1"}
+	// Resolve a search once, then download the exact result URL instead of
+	// asking YouTube to perform the same search a second time.
+	metaArgs := []string{
+		"--no-warnings", "--no-playlist", "--skip-download",
+		"--js-runtimes", "deno",
+		"--print", "%(id)s\t%(title)s\t%(duration)s\t%(thumbnail)s\t%(uploader)s\t%(webpage_url)s",
+	}
 	metaArgs = append(metaArgs, cookieArgs...)
-	metaArgs = append(metaArgs, "--print", "%(id)s", "--print", "%(title)s", "--print", "%(duration)s", target)
+	metaArgs = append(metaArgs, target)
 	metaCmd := exec.CommandContext(ctx, "yt-dlp", metaArgs...)
-	metaBytes, err := metaCmd.Output()
-	if err != nil {
-		return "", "", fmt.Errorf("yt-dlp metadata lookup: %w", err)
+	var metaOut, metaErr bytes.Buffer
+	metaCmd.Stdout, metaCmd.Stderr = &metaOut, &metaErr
+	if err := metaCmd.Run(); err != nil {
+		detail := strings.TrimSpace(metaErr.String())
+		if detail == "" { detail = err.Error() }
+		return track{}, fmt.Errorf("yt-dlp metadata lookup: %s", brief(detail, 700))
 	}
-	id, title, err := parseYtDlpMetadata(string(metaBytes))
-	if err != nil {
-		return "", "", err
+	t, err := parseYtDlpInfo(metaOut.String(), query)
+	if err != nil { return track{}, err }
+	if t.duration > float64(maxDurationMinutes()*60) {
+		return track{}, fmt.Errorf("track is %.0f minutes long; FRIDAY's limit is %d minutes", t.duration/60, maxDurationMinutes())
 	}
-	if duration, ok := parseYtDlpDuration(string(metaBytes)); ok {
-		limit := maxDurationMinutes()
-		if duration > float64(limit*60) {
-			return "", "", fmt.Errorf("track is %.0f minutes long; FRIDAY's limit is %d minutes", duration/60, limit)
-		}
-	}
-	base := filepath.Join(dir, fmt.Sprintf("%s_%d", sanitize(id), time.Now().UnixNano()))
-	args := []string{"--no-warnings", "--playlist-items", "1", "--force-overwrites"}
+	if err := os.MkdirAll(dir, 0o755); err != nil { return track{}, err }
+
+	base := filepath.Join(dir, fmt.Sprintf("%s_%d", sanitize(t.id), time.Now().UnixNano()))
+	args := []string{"--no-warnings", "--no-playlist", "--force-overwrites", "--js-runtimes", "deno"}
 	args = append(args, cookieArgs...)
 	if video {
 		args = append(args, "-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best", "--merge-output-format", "mp4")
 	} else {
-		args = append(args, "-x", "--audio-format", "mp3", "--audio-quality", "5")
+		args = append(args, "-f", "bestaudio/best", "-x", "--audio-format", "mp3", "--audio-quality", "5")
 	}
-	args = append(args, "-o", base+".%(ext)s", target)
+	args = append(args, "-o", base+".%(ext)s", "--print", "after_move:filepath", t.url)
 	cmd := exec.CommandContext(ctx, "yt-dlp", args...)
-	if output, err := cmd.CombinedOutput(); err != nil {
+	var out, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &out, &stderr
+	if err := cmd.Run(); err != nil {
 		for _, partial := range mustGlob(base + ".*") { removeFile(partial) }
-		return "", "", fmt.Errorf("yt-dlp download: %w (%s)", err, brief(strings.TrimSpace(string(output)), 350))
+		detail := strings.TrimSpace(stderr.String())
+		if detail == "" { detail = strings.TrimSpace(out.String()) }
+		if detail == "" { detail = err.Error() }
+		return track{}, fmt.Errorf("yt-dlp download: %s", brief(detail, 700))
 	}
-	ext := ".mp3"
-	if video {
-		ext = ".mp4"
+	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+	if len(lines) == 0 || strings.TrimSpace(lines[len(lines)-1]) == "" {
+		return track{}, fmt.Errorf("yt-dlp finished without returning the output file path")
 	}
-	path := base + ext
-	if _, err := os.Stat(path); err != nil {
-		return "", "", fmt.Errorf("download completed but expected output %s was not found: %w", filepath.Base(path), err)
+	t.path = strings.TrimSpace(lines[len(lines)-1])
+	t.requested = query
+	t.video = video
+	if _, err := os.Stat(t.path); err != nil {
+		return track{}, fmt.Errorf("downloaded file not found: %w", err)
 	}
-	return title, path, nil
+	return t, nil
+}
+
+func parseYtDlpInfo(output, requested string) (track, error) {
+	line := strings.TrimSpace(strings.SplitN(output, "\n", 2)[0])
+	if line == "" { return track{}, fmt.Errorf("yt-dlp returned no metadata") }
+	fields := strings.Split(line, "\t")
+	if len(fields) < 6 { return track{}, fmt.Errorf("yt-dlp returned incomplete metadata (%d fields)", len(fields)) }
+	t := track{
+		id: strings.TrimSpace(fields[0]), title: strings.TrimSpace(fields[1]),
+		thumbnail: strings.TrimSpace(fields[3]), uploader: strings.TrimSpace(fields[4]),
+		url: strings.TrimSpace(fields[5]), requested: requested,
+	}
+	if strings.EqualFold(t.thumbnail, "NA") { t.thumbnail = "" }
+	if strings.EqualFold(t.uploader, "NA") { t.uploader = "" }
+	if strings.EqualFold(t.url, "NA") { t.url = "" }
+	if strings.TrimSpace(fields[2]) != "" && !strings.EqualFold(strings.TrimSpace(fields[2]), "NA") {
+		t.duration, _ = strconv.ParseFloat(strings.TrimSpace(fields[2]), 64)
+	}
+	if t.url == "" && strings.HasPrefix(requested, "http") { t.url = requested }
+	if t.title == "" { t.title = t.id }
+	if t.id == "" { t.id = sanitize(t.title) }
+	if t.title == "" || t.url == "" { return track{}, fmt.Errorf("yt-dlp returned no usable title or webpage URL") }
+	return t, nil
 }
 
 func parseYtDlpMetadata(output string) (string, string, error) {
-	lines := strings.SplitN(strings.TrimSpace(output), "\n", 3)
-	if len(lines) == 0 || strings.TrimSpace(lines[0]) == "" {
-		return "", "", fmt.Errorf("source returned no media ID")
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	if len(lines) < 2 || strings.TrimSpace(lines[0]) == "" || strings.TrimSpace(lines[1]) == "" {
+		return "", "", fmt.Errorf("yt-dlp returned incomplete metadata")
 	}
-	id := strings.TrimSpace(lines[0])
-	title := id
-	if len(lines) > 1 && strings.TrimSpace(lines[1]) != "" {
-		title = strings.TrimSpace(lines[1])
-	}
-	return id, title, nil
+	return strings.TrimSpace(lines[0]), strings.TrimSpace(lines[1]), nil
 }
 
 func parseYtDlpDuration(output string) (float64, bool) {
-	lines := strings.SplitN(strings.TrimSpace(output), "\n", 3)
-	if len(lines) < 3 || strings.TrimSpace(lines[2]) == "" || strings.EqualFold(strings.TrimSpace(lines[2]), "NA") {
-		return 0, false
-	}
-	seconds, err := strconv.ParseFloat(strings.TrimSpace(lines[2]), 64)
-	return seconds, err == nil && seconds >= 0
+	lines := strings.Split(strings.TrimSpace(output), "\n")
+	if len(lines) < 3 { return 0, false }
+	value := strings.TrimSpace(lines[2])
+	if value == "" || strings.EqualFold(value, "NA") { return 0, false }
+	duration, err := strconv.ParseFloat(value, 64)
+	return duration, err == nil && duration >= 0
 }
 
 func maxDurationMinutes() int {
-	limit, err := strconv.Atoi(strings.TrimSpace(os.Getenv("MAX_DURATION_MINUTES")))
+	// Match Sanya's DURATION_LIMIT variable name; retain the earlier
+	// MAX_DURATION_MINUTES name as a backwards-compatible fallback.
+	raw := strings.TrimSpace(os.Getenv("DURATION_LIMIT"))
+	if raw == "" { raw = strings.TrimSpace(os.Getenv("MAX_DURATION_MINUTES")) }
+	limit, err := strconv.Atoi(raw)
 	if err != nil || limit < 1 || limit > 240 {
 		return 30
 	}
@@ -220,8 +299,10 @@ func (b *bot) register() {
 	b.client.OnCommand("sessionphone", b.handleSessionPhone)
 	b.client.OnCommand("sessioncode", b.handleSessionCode)
 	b.client.OnCommand("sessionpassword", b.handleSessionPassword)
-	b.client.OnCommand("start", func(m *telegram.NewMessage) error { return reply2(m, "✦ FRIDAY MUSIC\nYour voice-chat soundtrack is ready.\n\nType /help to explore commands.") })
-	b.client.OnCommand("help", func(m *telegram.NewMessage) error { return reply2(m, "✦ FRIDAY MUSIC · COMMANDS\n━━━━━━━━━━━━━━\n♫ PLAYBACK\n├ /play <song or URL> — play music\n├ /vplay — play replied video\n├ /vp9play — video with VP9\n├ /playing — current track\n├ /queue — upcoming tracks\n├ /loop — repeat current track\n├ /loopqueue — repeat the queue\n├ /remove <number> — remove queued track\n└ /clear — clear upcoming tracks\n\n◈ CONTROLS\n├ /pause · /resume · /skip\n├ /stop — stop and clear queue\n├ /leave — leave voice chat\n├ /shuffle — mix the queue\n└ /volume <0-200> — volume\n\n⌁ INFO\n├ /stats — stream status\n└ /participants — voice chat members\n\n⚙ SETUP\n└ /gensession — owner-only, private chat\n━━━━━━━━━━━━━━\nMade for late-night listening.") })
+	b.client.OnCommand("start", b.handleStart)
+	b.client.OnCommand("help", b.handleHelp)
+	b.client.OnCallback("^friday:", b.handleUICallback)
+	b.client.On("message", b.handleWelcome)
 	b.client.OnCommand("play", b.handlePlay(false, false))
 	b.client.OnCommand("vplay", b.handlePlay(true, false))
 	b.client.OnCommand("vp9play", b.handlePlay(true, true))
@@ -232,6 +313,8 @@ func (b *bot) register() {
 	b.client.OnCommand("end", b.handleStop)
 	b.client.OnCommand("leave", b.handleLeave)
 	b.client.OnCommand("volume", b.handleVolume)
+	b.client.OnCommand("mute", b.handleMute)
+	b.client.OnCommand("unmute", b.handleUnmute)
 	b.client.OnCommand("queue", b.handleQueue)
 	b.client.OnCommand("loop", b.handleLoop)
 	b.client.OnCommand("loopqueue", b.handleLoopQueue)
@@ -243,26 +326,34 @@ func (b *bot) register() {
 	b.client.OnCommand("participants", b.handleParticipants)
 }
 func (b *bot) handleSkip(m *telegram.NewMessage) error {
+	if err := b.requireControl(m); err != nil { return err }
 	if !b.mgr.get(m.ChatID()).skip() { return reply2(m, "♫ NOTHING PLAYING\n╰─ Queue a track with /play.") }
 	return reply2(m, "⏭ TRACK SKIPPED")
 }
 func (b *bot) handlePause(m *telegram.NewMessage) error {
+	if err := b.requireControl(m); err != nil { return err }
 	if !b.mgr.get(m.ChatID()).pause() { return reply2(m, "Ⅱ Nothing is playing to pause.") }
+	b.refreshNowPlaying(m.ChatID())
 	return reply2(m, "Ⅱ PLAYBACK PAUSED")
 }
 func (b *bot) handleResume(m *telegram.NewMessage) error {
+	if err := b.requireControl(m); err != nil { return err }
 	if !b.mgr.get(m.ChatID()).resume() { return reply2(m, "▶ Nothing is paused right now.") }
+	b.refreshNowPlaying(m.ChatID())
 	return reply2(m, "▶ PLAYBACK RESUMED")
 }
 func (b *bot) handleStop(m *telegram.NewMessage) error {
+	if err := b.requireControl(m); err != nil { return err }
 	s := b.mgr.get(m.ChatID())
 	s.stop()
 	err := s.leave()
 	b.mgr.dropIfSame(m.ChatID(), s)
+	b.markPlaybackEnded(m.ChatID(), "■ <b>ᴘʟᴀʏʙᴀᴄᴋ sᴛᴏᴘᴘᴇᴅ</b>\n╰─ ǫᴜᴇᴜᴇ ᴄʟᴇᴀʀᴇᴅ.")
 	if err != nil { return reply2(m, "■ STOPPED\n└ Voice-chat warning: "+err.Error()) }
 	return reply2(m, "■ PLAYBACK STOPPED\n╰─ Queue cleared.")
 }
 func (b *bot) handleLeave(m *telegram.NewMessage) error {
+	if err := b.requireControl(m); err != nil { return err }
 	s := b.mgr.get(m.ChatID())
 	err := s.leave()
 	b.mgr.dropIfSame(m.ChatID(), s)
@@ -270,9 +361,11 @@ func (b *bot) handleLeave(m *telegram.NewMessage) error {
 	return reply2(m, "↗ LEFT VOICE CHAT")
 }
 func (b *bot) handleVolume(m *telegram.NewMessage) error {
+	if err := b.requireControl(m); err != nil { return err }
 	v, err := strconv.Atoi(strings.TrimSpace(m.Args()))
 	if err != nil || v < 0 || v > 200 { return reply2(m, "◈ Usage: /volume <0-200>") }
 	if err := b.mgr.get(m.ChatID()).setVolume(v); err != nil { return reply2(m, "◈ VOLUME ERROR\n└ "+err.Error()) }
+	b.refreshNowPlaying(m.ChatID())
 	return reply2(m, fmt.Sprintf("◈ VOLUME SET\n╰─ %d%%", v))
 }
 func (b *bot) handleQueue(m *telegram.NewMessage) error {
@@ -288,14 +381,18 @@ func (b *bot) handleQueue(m *telegram.NewMessage) error {
 	return reply2(m, out.String())
 }
 func (b *bot) handleLoop(m *telegram.NewMessage) error {
+	if err := b.requireControl(m); err != nil { return err }
 	enabled := b.mgr.get(m.ChatID()).toggleLoop()
 	if enabled {
-		return reply2(m, "↻ REPEAT ENABLED\n╰─ The current track will repeat until /loop is used again.")
+		b.refreshNowPlaying(m.ChatID())
+	return reply2(m, "↻ REPEAT ENABLED\n╰─ The current track will repeat until /loop is used again.")
 	}
+	b.refreshNowPlaying(m.ChatID())
 	return reply2(m, "↻ REPEAT DISABLED")
 }
 
 func (b *bot) handleLoopQueue(m *telegram.NewMessage) error {
+	if err := b.requireControl(m); err != nil { return err }
 	enabled := b.mgr.get(m.ChatID()).toggleLoopQueue()
 	if enabled {
 		return reply2(m, "↻ QUEUE REPEAT ENABLED\n╰─ Tracks will cycle in queue order.")
@@ -304,11 +401,13 @@ func (b *bot) handleLoopQueue(m *telegram.NewMessage) error {
 }
 
 func (b *bot) handleClear(m *telegram.NewMessage) error {
+	if err := b.requireControl(m); err != nil { return err }
 	count := b.mgr.get(m.ChatID()).clearQueue()
 	return reply2(m, fmt.Sprintf("⌫ QUEUE CLEARED\n╰─ Removed %d upcoming track(s).", count))
 }
 
 func (b *bot) handleRemove(m *telegram.NewMessage) error {
+	if err := b.requireControl(m); err != nil { return err }
 	index, err := strconv.Atoi(strings.TrimSpace(m.Args()))
 	if err != nil || index < 1 {
 		return reply2(m, "⌫ Usage: /remove <queue number>")
@@ -343,16 +442,43 @@ func (b *bot) handleParticipants(m *telegram.NewMessage) error {
 }
 func reply2(m *telegram.NewMessage, text string) error { _, err := m.Reply(text); return err }
 func edit(m *telegram.NewMessage, text string) error { if m == nil { return nil }; _, err := m.Edit(text); return err }
+func isPlayableTelegramMedia(m *telegram.NewMessage) bool {
+	return m != nil && (m.Audio() != nil || m.Voice() != nil || m.Video() != nil)
+}
+
 func mediaTitle(m *telegram.NewMessage) string {
-	if a := m.Audio(); a != nil {
-		for _, attr := range a.Attributes {
-			if t, ok := attr.(*telegram.DocumentAttributeAudio); ok && t.Title != "" {
-				if t.Performer != "" { return t.Performer+" - "+t.Title }; return t.Title
+	if m == nil { return "telegram-media" }
+	docs := []*telegram.DocumentObj{m.Audio(), m.Voice(), m.Video()}
+	for _, doc := range docs {
+		if doc == nil { continue }
+		for _, attr := range doc.Attributes {
+			if audio, ok := attr.(*telegram.DocumentAttributeAudio); ok && audio.Title != "" {
+				if audio.Performer != "" { return audio.Performer + " - " + audio.Title }
+				return audio.Title
 			}
-			if f, ok := attr.(*telegram.DocumentAttributeFilename); ok && f.FileName != "" { return f.FileName }
+			if filename, ok := attr.(*telegram.DocumentAttributeFilename); ok && filename.FileName != "" {
+				return filename.FileName
+			}
 		}
 	}
-	return "telegram-media"
+	return "Telegram media"
+}
+
+func mediaDuration(m *telegram.NewMessage) float64 {
+	if m == nil { return 0 }
+	docs := []*telegram.DocumentObj{m.Audio(), m.Voice(), m.Video()}
+	for _, doc := range docs {
+		if doc == nil { continue }
+		for _, attr := range doc.Attributes {
+			switch value := attr.(type) {
+			case *telegram.DocumentAttributeAudio:
+				if value.Duration > 0 { return float64(value.Duration) }
+			case *telegram.DocumentAttributeVideo:
+				if value.Duration > 0 { return float64(value.Duration) }
+			}
+		}
+	}
+	return 0
 }
 func brief(s string, limit int) string {
 	s = strings.Join(strings.Fields(s), " ")
@@ -372,6 +498,7 @@ func sanitize(name string) string {
 }
 
 func (b *bot) handleShuffle(m *telegram.NewMessage) error {
+	if err := b.requireControl(m); err != nil { return err }
 	count := b.mgr.get(m.ChatID()).shuffle()
 	if count < 2 { return reply2(m, "⤨ Add at least two upcoming tracks to shuffle.") }
 	return reply2(m, fmt.Sprintf("⤨ QUEUE SHUFFLED\n╰─ Mixed %d upcoming tracks.", count))

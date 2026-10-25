@@ -57,6 +57,27 @@ func TestShuffleLeavesShortQueueUnchanged(t *testing.T) {
 	}
 }
 
+func TestParseYtDlpInfo(t *testing.T) {
+	output := "abc123\tA Sample Track\t185.5\thttps://img.example/cover.jpg\tSample Artist\thttps://www.youtube.com/watch?v=abc123\n"
+	got, err := parseYtDlpInfo(output, "sample track")
+	if err != nil { t.Fatal(err) }
+	if got.id != "abc123" || got.title != "A Sample Track" || got.duration != 185.5 {
+		t.Fatalf("metadata identity = (%q, %q, %v)", got.id, got.title, got.duration)
+	}
+	if got.thumbnail != "https://img.example/cover.jpg" || got.uploader != "Sample Artist" {
+		t.Fatalf("metadata artwork/uploader = (%q, %q)", got.thumbnail, got.uploader)
+	}
+	if got.url != "https://www.youtube.com/watch?v=abc123" || got.requested != "sample track" {
+		t.Fatalf("metadata URL/query = (%q, %q)", got.url, got.requested)
+	}
+}
+
+func TestParseYtDlpInfoRejectsIncompleteOutput(t *testing.T) {
+	if _, err := parseYtDlpInfo("only-title\n", "query"); err == nil {
+		t.Fatal("expected incomplete yt-dlp metadata to fail")
+	}
+}
+
 func TestParseYtDlpMetadata(t *testing.T) {
 	id, title, err := parseYtDlpMetadata("abc123\n  A Sample Track  \n")
 	if err != nil {
@@ -216,18 +237,24 @@ func TestParseYtDlpDuration(t *testing.T) {
 	}
 }
 
-func TestMaxDurationMinutesDefaultsAndValidates(t *testing.T) {
+func TestDurationLimitUsesSanyaVariableAndLegacyAlias(t *testing.T) {
+	t.Setenv("DURATION_LIMIT", "")
 	t.Setenv("MAX_DURATION_MINUTES", "")
 	if got := maxDurationMinutes(); got != 30 {
 		t.Fatalf("default duration = %d, want 30", got)
 	}
-	t.Setenv("MAX_DURATION_MINUTES", "999")
+	t.Setenv("DURATION_LIMIT", "45")
+	t.Setenv("MAX_DURATION_MINUTES", "20")
+	if got := maxDurationMinutes(); got != 45 {
+		t.Fatalf("DURATION_LIMIT = %d, want 45", got)
+	}
+	t.Setenv("DURATION_LIMIT", "")
+	if got := maxDurationMinutes(); got != 20 {
+		t.Fatalf("legacy duration = %d, want 20", got)
+	}
+	t.Setenv("DURATION_LIMIT", "999")
 	if got := maxDurationMinutes(); got != 30 {
 		t.Fatalf("invalid duration = %d, want default 30", got)
-	}
-	t.Setenv("MAX_DURATION_MINUTES", "45")
-	if got := maxDurationMinutes(); got != 45 {
-		t.Fatalf("configured duration = %d, want 45", got)
 	}
 }
 

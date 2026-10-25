@@ -22,9 +22,12 @@ func main() {
 		}
 	}
 
-	// SESSION_STRING is optional during first startup so the owner can generate it
-	// through /gensession. Never print the value itself.
-	sessionString := strings.TrimSpace(os.Getenv("SESSION_STRING"))
+	// STRING_SESSION is optional during first startup so the owner can generate a
+	// Gogram-compatible session through /gensession. Never print the value itself.
+	sessionString := strings.TrimSpace(os.Getenv("STRING_SESSION"))
+	if sessionString == "" {
+		sessionString = strings.TrimSpace(os.Getenv("SESSION_STRING"))
+	}
 	if strings.ContainsAny(sessionString, "\r\n\t ") {
 		log.Printf("SESSION_STRING contains embedded whitespace; assistant login will be skipped. Regenerate it with /gensession.")
 		sessionString = ""
@@ -92,13 +95,16 @@ func main() {
 	b := &bot{
 		client: botClient, assistant: assistant, mgr: newManager(),
 		logLevel: gortc.WithLogger(gortc.NewLogger(level)), downDir: downDir,
+		displayMessages: make(map[int64]int32),
 	}
-	b.register()
-
+	b.mgr.onTrack = b.onTrackStarted
+	b.mgr.onEnd = b.markTrackEnded
 	if me, err := botClient.GetMe(); err == nil {
+		b.botID, b.botUsername = me.ID, me.Username
 		log.Printf("FRIDAY Music is online as @%s", me.Username)
 	}
-	log.Println("Commands: /start /help /gensession /sessionphone /sessioncode /sessionpassword /play /vplay /vp9play /skip /pause /resume /stop /end /leave /volume /queue /shuffle /playing /stats /participants")
+	b.register()
+	log.Println("Commands: /start /help /gensession /sessionphone /sessioncode /sessionpassword /play /vplay /vp9play /skip /pause /resume /stop /end /leave /volume /mute /unmute /queue /shuffle /playing /stats /participants")
 
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
