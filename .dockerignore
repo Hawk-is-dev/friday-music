@@ -6,6 +6,7 @@
 *.session-journal
 cookies*.txt
 *.cookies.txt
+!cookies.txt
 downloads/
 logs/
 *.log
