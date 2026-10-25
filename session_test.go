@@ -179,12 +179,15 @@ func TestRemoveQueuedTrack(t *testing.T) {
 }
 
 func TestClearQueueReturnsTracksAndEmptiesQueue(t *testing.T) {
-	s := &session{queue: []track{{title: "one"}, {title: "two"}}}
+	s := &session{queue: []track{{title: "one"}, {title: "two"}}, loopQueue: true}
 	if got := s.clearQueue(); got != 2 {
 		t.Fatalf("clearQueue() = %d, want 2", got)
 	}
 	if len(s.queue) != 0 {
 		t.Fatalf("queue not empty after clearQueue: %#v", s.queue)
+	}
+	if s.loopQueueEnabled() {
+		t.Fatal("clearing the queue should disable queue-repeat mode")
 	}
 }
 
