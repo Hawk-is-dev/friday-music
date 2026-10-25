@@ -246,6 +246,8 @@ func (b *bot) handleQueue(m *telegram.NewMessage) error {
 	s := b.mgr.get(m.ChatID()); now, ok := s.nowPlaying(); tracks := s.list()
 	var out strings.Builder
 	if ok { out.WriteString("♫ NOW PLAYING\n╰─ "+now+"\n\n") } else { out.WriteString("♫ NOTHING PLAYING\n\n") }
+	if s.loopEnabled() { out.WriteString("↻ Repeat: current track\\n") }
+	if s.loopQueueEnabled() { out.WriteString("↻ Repeat: queue\\n") }
 	if len(tracks) == 0 { out.WriteString("╰─ Queue is empty.") } else {
 		out.WriteString("✦ UP NEXT\n")
 		for i, t := range tracks { fmt.Fprintf(&out, "%02d  ·  %s\n", i+1, t.title) }
