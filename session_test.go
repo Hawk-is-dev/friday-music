@@ -141,3 +141,49 @@ func TestShutdownAllClosesAndDropsSessions(t *testing.T) {
 		t.Fatalf("session after shutdown: closed=%v queueLen=%d", closed, queueLen)
 	}
 }
+
+func TestQueueLimitRejectsExtraTrack(t *testing.T) {
+	s := &session{queue: make([]track, maxQueuedTracks)}
+	_, _, err := s.enqueueTrack(nil, int64(123), track{title: "overflow"})
+	if err == nil || !strings.Contains(err.Error(), "queue limit") {
+		t.Fatalf("expected queue limit error, got %v", err)
+	}
+}
+
+func TestLoopToggle(t *testing.T) {
+	s := &session{}
+	if s.toggleLoop() != true || !s.loopEnabled() {
+		t.Fatal("expected loop to be enabled")
+	}
+	if s.toggleLoop() != false || s.loopEnabled() {
+		t.Fatal("expected loop to be disabled")
+	}
+}
+
+func TestRemoveQueuedTrack(t *testing.T) {
+	s := &session{queue: []track{
+		{title: "one", path: "1.mp3"},
+		{title: "two", path: "2.mp3"},
+		{title: "three", path: "3.mp3"},
+	}}
+	removed, ok := s.removeQueued(2)
+	if !ok || removed.title != "two" {
+		t.Fatalf("removeQueued(2) = %#v, %v", removed, ok)
+	}
+	if len(s.queue) != 2 || s.queue[0].title != "one" || s.queue[1].title != "three" {
+		t.Fatalf("unexpected queue after removal: %#v", s.queue)
+	}
+	if _, ok := s.removeQueued(0); ok {
+		t.Fatal("expected invalid queue index to be rejected")
+	}
+}
+
+func TestClearQueueReturnsTracksAndEmptiesQueue(t *testing.T) {
+	s := &session{queue: []track{{title: "one"}, {title: "two"}}}
+	if got := s.clearQueue(); got != 2 {
+		t.Fatalf("clearQueue() = %d, want 2", got)
+	}
+	if len(s.queue) != 0 {
+		t.Fatalf("queue not empty after clearQueue: %#v", s.queue)
+	}
+}
