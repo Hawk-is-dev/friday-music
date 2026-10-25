@@ -16,7 +16,7 @@ A Go-based Telegram group voice-chat music bot focused on per-chat playback sess
 - `/clear` — clear upcoming tracks without stopping the current track
 - `/stats`, `/participants`
 
-Each group has its own queue/session, so different groups can run separate playback sessions. The queue accepts up to 50 upcoming tracks per group to prevent unbounded memory/disk usage. Downloads use unique filenames to avoid collisions when the same song is requested in parallel. `/clear` removes only upcoming tracks; `/stop` clears the queue and leaves the voice chat.
+Each group has its own queue/session, so different groups can run separate playback sessions. The queue accepts up to 50 upcoming tracks per group to prevent unbounded memory/disk usage. External media is limited to 30 minutes by default; set `MAX_DURATION_MINUTES` (1–240) to change this. Unknown-duration sources are allowed but still depend on yt-dlp support. Downloads use unique filenames to avoid collisions when the same song is requested in parallel. `/clear` removes only upcoming tracks; `/stop` clears the queue and leaves the voice chat.
 
 ## Requirements
 
