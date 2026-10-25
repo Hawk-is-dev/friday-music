@@ -124,10 +124,14 @@ func formatPlaybackTime(value time.Duration) string {
 }
 
 func (b *bot) onTrackStarted(chatID int64, t track, player *gortc.Player) {
-	b.publishNowPlaying(chatID, t)
 	if player == nil { return }
 	s := b.mgr.find(chatID)
 	if s == nil { return }
+	s.mu.Lock()
+	active := s.player == player && s.current != nil
+	s.mu.Unlock()
+	if !active { return }
+	b.publishNowPlaying(chatID, t)
 	go func() {
 		ticker := time.NewTicker(10 * time.Second)
 		defer ticker.Stop()
