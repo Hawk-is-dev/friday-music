@@ -18,11 +18,13 @@ from upstash_redis import Redis
 from SANYAMUSIC import LOGGER
 
 # Initialize Redis Cache
-try:
-    redis_client = Redis(url=config.REDIS_URL, token=config.REDIS_TOKEN)
-except Exception as e:
-    LOGGER(__name__).error(f"Failed to initialize Redis: {e}")
-    redis_client = None
+redis_client = None
+if config.REDIS_URL and config.REDIS_TOKEN:
+    try:
+        redis_client = Redis(url=config.REDIS_URL, token=config.REDIS_TOKEN)
+    except Exception as e:
+        LOGGER(__name__).error(f"Failed to initialize Redis: {e}")
+        redis_client = None
 
 from SANYAMUSIC.utils.database import is_on_off
 from SANYAMUSIC.utils.formatters import time_to_seconds, seconds_to_min
@@ -530,8 +532,10 @@ class YouTubeAPI:
              except Exception as e:
                  LOGGER(__name__).warning(f"Redis stream cache read failed: {e}")
 
-        # --- Primary Action: Sonic API ---
+        # --- Primary Action: Sonic API (skipped when API_URL/API_KEY are not set) ---
         try:
+             if not (config.API_URL and config.API_KEY):
+                  raise LookupError("Sonic API not configured")
              media_type = "video" if video else "audio"
              async with aiohttp.ClientSession() as session:
                   url = f"{config.API_URL.rstrip('/')}/search"
@@ -565,6 +569,8 @@ class YouTubeAPI:
                               await asyncio.sleep(3)
                           else:
                               raise
+        except LookupError:
+             pass
         except Exception as e:
              LOGGER(__name__).warning(f"Sonic API stream extraction failed: {e}")
 
