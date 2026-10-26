@@ -1,0 +1,13 @@
+Features List:
+
+- Superfast⚡️ download and stream links.
+- No ads in playing songs.
+- Superfast interface.
+- Updates channel Support.
+- Mongodb database support for broadcasting.
+- User Friendly Interface.
+- Ping check.
+- Kickme and Video Chat Notifier are Available.
+- Real time CPU, RAM, Internet usage.
+- All unwanted code removed.
+- A lot more tired of writing check out by deploying it.

@@ -1,0 +1,25 @@
+Friday Music Bot - Commands List
+
+Basic Commands:
+- start : Check if the bot is alive.
+- help : Get help message.
+- ping : Check bot response time.
+
+Music Commands:
+- play [song name or link] : Play audio on voice chat.
+- vplay [video name or link] : Play video on voice chat.
+- cplay [song name or link] : Play in channel.
+- pause : Pause the current stream.
+- resume : Resume the paused stream.
+- skip : Skip to the next track.
+- stop : Stop playback and clear queue.
+- seek [duration] : Seek the stream.
+- seekback [duration] : Seek backward.
+
+Channel Commands:
+- channelplay [chat username or ID] : Connect channel to a group.
+
+Admin Commands:
+- reboot : Restart the bot.
+- auth : Authorize a user.
+- unauth : Unauthorize a user.

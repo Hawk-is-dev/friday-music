@@ -1,0 +1,24 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+
+# Environments — NEVER commit these
+.env
+.env.*
+.venv
+env/
+venv/
+
+# FridayMusic specific temporary files and secrets
+*.session
+*.session-journal
+log.txt
+downloads/
+raw_files/
+cache/
+thumbnails/
+
+# Cookies (YouTube auth) — keep private
+cookies/
+cookies.txt
+SANYAMUSIC/assets/cookies.txt
