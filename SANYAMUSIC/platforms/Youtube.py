@@ -601,6 +601,8 @@ class YouTubeAPI:
                     except:
                         pass
                 return 1, stream_url
+            LOGGER(__name__).error(f"yt-dlp returned no stream url for {video_id}")
+            return 0, None
         except Exception as e:
             LOGGER(__name__).error(f"Stream extraction finally failed for {video_id}: {e}")
             return 0, None
