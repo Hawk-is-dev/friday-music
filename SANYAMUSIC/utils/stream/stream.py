@@ -217,18 +217,18 @@ async def stream(
                 except:
                     pass
                 
-                    n, file_path = await YouTube.stream(
-                        vidid, videoid=True, video=status
+                n, file_path = await YouTube.stream(
+                    vidid, videoid=True, video=status
+                )
+                if n != 0 and file_path:
+                    direct = True
+                else:
+                    file_path, direct_download = await YouTube.download(
+                        vidid, mystic, videoid=True, video=status
                     )
-                    if n != 0 and file_path:
-                        direct = True
-                    else:
-                        file_path, direct_download = await YouTube.download(
-                            vidid, mystic, videoid=True, video=status
-                        )
-                        if not file_path:
-                            raise AssistantErr(_["play_14"])
-                        direct = False
+                    if not file_path:
+                        raise AssistantErr(_["play_14"])
+                    direct = False
             except Exception as e:
                 if "MESSAGE_NOT_MODIFIED" not in str(e):
                     LOGGER(__name__).error(f"Playback generation failed for {vidid}: {e}")
